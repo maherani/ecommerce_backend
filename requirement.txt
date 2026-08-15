@@ -1,0 +1,11 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0.post1
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9    # درایور اتصال به PostgreSQL
+alembic==1.12.1           # برای مدیریت ورژن‌های دیتابیس
+pydantic[email]==2.5.2    # برای اعتبارسنجی داده‌ها
+pydantic-settings==2.1.0    # این خط اضافه شد
+passlib[bcrypt]==1.7.4    # برای هش کردن رمز عبور
+python-jose[cryptography]==3.3.0 # برای توکن‌های JWT
+python-dotenv==1.0.0
+redis==5.0.1
