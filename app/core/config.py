@@ -1,25 +1,41 @@
-from pydantic_settings import BaseSettings
+# app/core/config.py
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
-    # تنظیمات دیتابیس
+    # PostgreSQL configuration.
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
     POSTGRES_HOST: str
     POSTGRES_PORT: str
 
-    # تنظیمات امنیتی
+    # JWT security configuration.
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
+    # Build the SQLAlchemy connection URL from environment variables.
     @property
     def DATABASE_URL(self) -> str:
-        # ساخت URL اتصال به دیتابیس برای SQLAlchemy به صورت خودکار
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return (
+            f"postgresql://"
+            f"{self.POSTGRES_USER}:"
+            f"{self.POSTGRES_PASSWORD}@"
+            f"{self.POSTGRES_HOST}:"
+            f"{self.POSTGRES_PORT}/"
+            f"{self.POSTGRES_DB}"
+        )
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"  # این خط اضافه شد تا متغیرهای اضافی در فایل env خطا ایجاد نکنند
-# یک نمونه گلوبال از تنظیمات می‌سازیم تا در همه جای برنامه استفاده کنیم
+    # Load configuration from the .env file.
+    # Extra environment variables are ignored so unrelated settings
+    # do not break application startup.
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
+
+
+# Create one shared settings instance for the whole application.
 settings = Settings()
