@@ -14,6 +14,8 @@ Client / Frontend
        v
     FastAPI
        |
+       +---- Dockerfile
+       +---- requirements.txt
        +---- User Module
        |       +---- Router
        |       +---- CRUD
@@ -34,6 +36,8 @@ Redis
 
 Implemented Features
 Application
+  - FastAPI Dockerfile created and local build tested
+  - Python dependencies exported to requirements.txt
 FastAPI application
 Uvicorn development server
 Environment-based configuration
@@ -128,6 +132,7 @@ The existing PostgreSQL database has been stamped at this revision.
 Step 5 was committed and pushed to GitHub successfully.
 
 Pending Work
+  - Build and verify the FastAPI Docker image.
 Review and improve Docker configuration.
 Build and verify the FastAPI Docker image.
 Enable and correct the FastAPI Docker service.
