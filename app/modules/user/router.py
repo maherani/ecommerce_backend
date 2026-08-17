@@ -1,8 +1,11 @@
 # app/modules/user/router.py
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer , OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from jose import JWTError, jwt
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.modules.user import crud, schemas
@@ -51,28 +54,28 @@ def create_user(
 
     return new_user
 
-
 @router.post(
     "/login",
     response_model=schemas.Token,
 )
 def login_user(
-    user_credentials: schemas.UserLogin,
+    # تغییر از UserLogin به فرم استاندارد OAuth2
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
     """
     Authenticate a user and return a JWT access token.
+    (Using standard OAuth2 form data for Swagger compatibility)
     """
 
-    # Find the user by email.
+    # فرم استاندارد از فیلد username استفاده می‌کند، ما ایمیل را درون آن قرار می‌دهیم
     user = crud.get_user_by_email(
         db,
-        email=user_credentials.email,
+        email=form_data.username,
     )
 
-    # Reject the request if the user does not exist or the password is wrong.
     if not user or not crud.verify_password(
-        user_credentials.password,
+        form_data.password,
         user.hashed_password,
     ):
         raise HTTPException(
@@ -81,7 +84,6 @@ def login_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create a JWT containing the user's email as the subject.
     access_token = create_access_token(
         data={"sub": user.email},
     )
@@ -90,3 +92,50 @@ def login_user(
         "access_token": access_token,
         "token_type": "bearer",
     }
+
+# مسیر دریافت توکن برای Swagger
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    """
+    تزریق وابستگی برای دریافت کاربر فعلی از طریق توکن
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        # رمزگشایی توکن
+        payload = jwt.decode(
+            token, 
+            settings.SECRET_KEY, 
+            algorithms=[settings.ALGORITHM]
+        )
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    # جستجوی کاربر در دیتابیس
+    user = crud.get_user_by_email(db, email=email)
+    if user is None:
+        raise credentials_exception
+        
+    return user
+
+@router.get(
+    "/me",
+    response_model=schemas.UserResponse,
+)
+def read_users_me(
+    current_user = Depends(get_current_user)
+):
+    """
+    دریافت اطلاعات پروفایل کاربر لاگین شده (مسیر محافظت‌شده)
+    """
+    return current_user
