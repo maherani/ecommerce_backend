@@ -41,6 +41,9 @@ Application
 Docker
   - FastAPI service containerized and integrated into docker-compose.yml
   - Application successfully running with Docker Compose alongside PostgreSQL and Redis
+  - Custom internal bridge network (`backend_network`) configured
+  - External host port mapping removed for PostgreSQL and Redis to enforce network isolation  and security
+  
 FastAPI application
 Uvicorn development server
 Environment-based configuration
