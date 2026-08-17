@@ -93,6 +93,7 @@ def login_user(
         "token_type": "bearer",
     }
 
+
 # مسیر دریافت توکن برای Swagger
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
 
@@ -132,6 +133,7 @@ def get_current_user(
     "/me",
     response_model=schemas.UserResponse,
 )
+
 def read_users_me(
     current_user = Depends(get_current_user)
 ):
@@ -139,3 +141,30 @@ def read_users_me(
     دریافت اطلاعات پروفایل کاربر لاگین شده (مسیر محافظت‌شده)
     """
     return current_user
+
+
+def get_current_admin_user(
+    current_user = Depends(get_current_user)
+):
+    """
+    تزریق وابستگی برای بررسی سطح دسترسی مدیر (Superuser)
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user doesn't have enough privileges",
+        )
+    return current_user
+
+
+@router.get(
+    "/admin-only",
+    response_model=schemas.UserResponse,
+)
+def read_admin_data(
+    current_admin = Depends(get_current_admin_user)
+):
+    """
+    مسیر محافظت‌شده اختصاصی فقط برای کاربران مدیر
+    """
+    return current_admin

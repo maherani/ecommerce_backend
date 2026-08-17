@@ -42,6 +42,10 @@ Application
   - Implemented get_current_user dependency for JWT validation and user context injection
   - Created protected GET /users/me endpoint
   - Standardized database connection string to point to the docker container service ('db')
+  - Added is_superuser column to User database model and Pydantic schemas
+  - Implemented get_current_admin_user dependency to restrict access to authorized superusers
+  - Created protected GET /users/admin-only endpoint returning 403 for regular users and 200 for admins
+
 Docker
   - FastAPI service containerized and integrated into docker-compose.yml
   - Application successfully running with Docker Compose alongside PostgreSQL and Redis
@@ -155,6 +159,7 @@ Pending Work
   - Build and verify the FastAPI Docker image.[Done]
   - Enable and correct the FastAPI Docker service.[Done]
   - Implement JWT protected routes and get_current_user dependency. [Done]
+  - Implement role-based access control (RBAC / Admin Authorization). [Done]
 Run FastAPI inside Docker.
   - Verify communication between FastAPI and PostgreSQL containers.[Done]
   - Verify the complete application with Docker Compose.[Done]
@@ -183,10 +188,6 @@ Next Recommended Step
 
 Step 6: Review the existing Docker configuration before making any changes.
 
-The first action in Step 6 must be inspection of the current Dockerfile and docker-compose.yml.
-
-No Docker configuration should be changed until the current state has been inspected and tested.
-
 Step 7
 
 JWT-based authentication flow and protected endpoints implemented and fully verified.
@@ -194,6 +195,17 @@ JWT-based authentication flow and protected endpoints implemented and fully veri
 - OAuth2 form data compatibility configured with python-multipart
 - get_current_user dependency successfully extracts user from JWT Bearer header
 - GET /users/me verified with HTTP 200 OK
+
+Step 8
+
+Role-based access control (RBAC) implemented and verified.
+- Database model and schemas updated with is_superuser field
+- get_current_admin_user dependency successfully filters non-admin requests with 403 Forbidden
+- Admin access verified with HTTP 200 OK after database privilege escalation
+The first action in Step 6 must be inspection of the current Dockerfile and docker-compose.yml.
+
+No Docker configuration should be changed until the current state has been inspected and tested.
+
 Documentation Files
 
 
