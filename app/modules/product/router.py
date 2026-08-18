@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List , Optional
 
 from app.core.database import get_db
 from app.modules.product import models, schemas
@@ -33,9 +33,27 @@ def create_category(
 # Product Routes
 # ==========================
 @router.get("/products/", response_model=List[schemas.ProductResponse])
-def get_products(db: Session = Depends(get_db)):
-    """دریافت لیست تمام محصولات (عمومی)"""
-    return db.query(models.Product).all()
+def get_products(
+    skip: int = 0,
+    limit: int = 10,
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """دریافت لیست تمام محصولات با قابلیت جستجو، فیلتر و صفحه‌بندی (عمومی)"""
+    query = db.query(models.Product)
+
+    # فیلتر جستجو بر اساس عنوان محصول
+    if search:
+        query = query.filter(models.Product.title.ilike(f"%{search}%"))
+        
+    # فیلتر بر اساس شناسه دسته‌بندی
+    if category_id:
+        query = query.filter(models.Product.category_id == category_id)
+
+    # اعمال صفحه‌بندی
+    products = query.offset(skip).limit(limit).all()
+    return products
 
 @router.post("/products/", response_model=schemas.ProductResponse, status_code=status.HTTP_201_CREATED)
 def create_product(

@@ -103,6 +103,7 @@ Redis
 Category model:
 - `id`
 - `name`
+
 - `description`
 
 Product model:
@@ -120,6 +121,10 @@ Public APIs:
 Admin APIs:
 - `POST /categories/`
 - `POST /products/`
+
+- Added pagination (skip/limit) to GET /products/
+- Implemented search filtering by title (case-insensitive) for products
+- Added category filtering capability to the products list endpoint
 
 ## Database
 
@@ -321,6 +326,18 @@ Verified through Swagger.
 
 Status: **Completed**
 
+### Step 10 — Product and Category Catalog Upgrade
+Step 10
+
+Product catalog upgraded with search and pagination capabilities.
+- Added skip and limit parameters for pagination
+- Added search parameter using SQLAlchemy ilike operator
+- Added category_id parameter for filtering products by category
+- Successfully tested via Swagger UI
+Verified through Swagger.
+
+Status: **Completed**
+
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -428,7 +445,7 @@ Alembic migrations
 ```
 
 No code should be changed before the current state is inspected.
-
+- Add pagination and search filtering to the products API. [Done]
 ## Development Rules
 
 1. No step is complete without a successful test.
