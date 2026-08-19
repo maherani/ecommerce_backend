@@ -6,6 +6,7 @@ from app.core.database import Base, engine
 from app.modules.user import models as user_models
 from app.modules.product import models as product_models
 from app.modules.cart import models as cart_models
+from app.modules.order import models as order_models
 from fastapi.middleware.cors import CORSMiddleware
 
 # ۳. ایمپورت روترها
@@ -13,6 +14,7 @@ from app.modules.product import models as product_models
 from app.modules.user.router import router as user_router
 from app.modules.product.router import router as product_router  # اضافه شدن این خط
 from app.modules.cart.router import router as cart_router
+from app.modules.order.router import router as order_router
 # این خط برای این است که تنظیمات اولیه لود شوند
 from app.core.config import settings
 
@@ -40,6 +42,7 @@ app.add_middleware(
 app.include_router(user_router)
 app.include_router(product_router)  # اضافه شدن این خط
 app.include_router(cart_router)
+app.include_router(order_router)
 # یک مسیر ساده برای تست سلامت سرور (Health Check)
 @app.get("/")
 def health_check():

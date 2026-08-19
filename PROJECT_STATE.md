@@ -132,6 +132,11 @@ Admin APIs:
 - Implemented POST /cart/ to add/increment products in the cart
 - Implemented DELETE /cart/{item_id} to remove items from the cart
 
+## Orders
+  - Created order module with Order and OrderItem SQLAlchemy models
+  - Implemented POST /orders/checkout logic to calculate total price, lock unit prices, and   clear the user's cart
+  - Implemented GET /orders/ endpoint to list a user's order history
+
 ## Database
 
 PostgreSQL is the primary relational database.
@@ -353,6 +358,12 @@ Step 11
     Verified through Swagger.
 
     Status: **Completed**
+
+## Step 12 - Order checkout flow implemented successfully.
+Step 12
+  - Database tables 'orders' and 'order_items' created
+  - Checkout API correctly migrates cart items to order items and calculates the total price
+  - User's cart is successfully emptied upon order creation
     
 ## Major Lessons Learned
 
@@ -420,6 +431,7 @@ docs/
 - Shopping cart
     - Implement Cart module (Add, View, Remove items). [Done]
 - Orders
+    - Implement Checkout and Order management module. [Done]
 - Payment integration
 - Shipping
 - Administration expansion
