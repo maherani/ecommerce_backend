@@ -126,6 +126,12 @@ Admin APIs:
 - Implemented search filtering by title (case-insensitive) for products
 - Added category filtering capability to the products list endpoint
 
+## Carts
+- Created cart module with CartItem SQLAlchemy model and Pydantic schemas
+- Implemented user-specific GET /cart/ to retrieve current user's cart
+- Implemented POST /cart/ to add/increment products in the cart
+- Implemented DELETE /cart/{item_id} to remove items from the cart
+
 ## Database
 
 PostgreSQL is the primary relational database.
@@ -338,6 +344,16 @@ Verified through Swagger.
 
 Status: **Completed**
 
+### Step 11 — Cart management module implemented and verified.
+Step 11
+  - Database table 'cart_items' created with user and product relationships
+  - Users can view, add, update, and remove items in their own isolated cart
+  - API secured with get_current_user JWT dependency
+  - Successfully tested via Swagger UI
+    Verified through Swagger.
+
+    Status: **Completed**
+    
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -402,6 +418,7 @@ docs/
 - Automated testing improvement
 - Inventory management
 - Shopping cart
+    - Implement Cart module (Add, View, Remove items). [Done]
 - Orders
 - Payment integration
 - Shipping
