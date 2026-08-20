@@ -149,6 +149,10 @@ Admin APIs:
   - Added end-to-end (E2E) integration tests for the shopping flow
   - Implemented tests for viewing products, adding to cart, checkout, and payment processing
 
+## CI/CD Pipiline 
+  - Configured GitHub Actions CI pipeline (.github/workflows/ci.yml)
+  - Automated Docker container builds and Pytest execution on every push to main
+
 ## Database
 
 PostgreSQL is the primary relational database.
@@ -407,6 +411,11 @@ Step 15
        Verified through command ---> "docker compose exec web pytest" 
   Status: **Completed**
 
+## step 16 -   GitHub Actions CI integration complete.
+  Step 16
+  - .github/workflows/ci.yml triggers automatically on push/PR to main
+  - Automatically builds Docker environment and runs all test suites via Pytest
+  
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -484,6 +493,7 @@ docs/
 - Structured logging
 - Monitoring and observability
 - CI/CD
+  - Set up GitHub Actions CI workflow. [Done]
 - Production hardening
 
 ## Future Enhancements
