@@ -192,6 +192,9 @@ alembic stamp head
 
 This avoided recreating the existing table and prevented data loss.
 
+  - Integrated Alembic for database migration and version control
+  - Transferred database schema management from SQLAlchemy create_all to Alembic autogenerate
+
 ## Docker
 
 Current Docker services:
@@ -415,7 +418,16 @@ Step 15
   Step 16
   - .github/workflows/ci.yml triggers automatically on push/PR to main
   - Automatically builds Docker environment and runs all test suites via Pytest
-  
+
+## step 17 - Database migration system successfully implemented.
+Step 17
+  - Alembic configured and synced with the existing PostgreSQL database
+  - initial_migration created and stamped
+  - Application entry point updated to remove direct metadata creation
+  - All tests passing correctly inside the Docker container
+       Verified through command ---> "docker compose exec web pytest" 
+  Status: **Completed**
+
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -495,7 +507,8 @@ docs/
 - CI/CD
   - Set up GitHub Actions CI workflow. [Done]
 - Production hardening
-
+- database Migration 
+  - Set up database migrations with Alembic. [Done]
 ## Future Enhancements
 
 - Stronger password validation

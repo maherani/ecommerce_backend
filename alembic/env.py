@@ -1,16 +1,22 @@
+import os
 from logging.config import fileConfig
-
+from sqlalchemy import engine_from_config, pool
 from alembic import context
-
+# ۱. اضافه کردن Base و مدل‌ها برای کشف خودکار جداول
 from app.core.config import settings
 from app.core.database import Base
 
 # Import models so SQLAlchemy registers their tables in Base.metadata.
 from app.modules.user import models  # noqa: F401
-
+from app.modules.product import models
+from app.modules.cart import models
+from app.modules.order import models
 
 # Alembic Config object.
 config = context.config
+
+# ۲. تنظیم آدرس دیتابیس از تنظیمات برنامه
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Configure Python logging from alembic.ini.
 if config.config_file_name is not None:
