@@ -137,6 +137,11 @@ Admin APIs:
   - Implemented POST /orders/checkout logic to calculate total price, lock unit prices, and   clear the user's cart
   - Implemented GET /orders/ endpoint to list a user's order history
 
+
+## Mock Payment Module
+  - Created mock payment module to process pending orders
+  - Implemented POST /payment/process to validate orders, update status to 'paid', and generate mock transaction IDs
+
 ## Database
 
 PostgreSQL is the primary relational database.
@@ -364,7 +369,15 @@ Step 12
   - Database tables 'orders' and 'order_items' created
   - Checkout API correctly migrates cart items to order items and calculates the total price
   - User's cart is successfully emptied upon order creation
-    
+
+
+## step 13 - Mock Payment module implemented.
+Step 13
+
+- POST /payment/process successfully verifies pending orders
+- Changes order status to 'paid' and generates a UUID transaction ID
+- Prevented double-processing of already paid orders
+
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -433,6 +446,7 @@ docs/
 - Orders
     - Implement Checkout and Order management module. [Done]
 - Payment integration
+  - Implement mock Payment simulation module. [Done]
 - Shipping
 - Administration expansion
 - Redis caching
