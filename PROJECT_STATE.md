@@ -146,6 +146,8 @@ Admin APIs:
   - Set up Pytest and automated testing framework with Docker execution
   - Implemented conftest.py with cleanups, test user factory fixture, and JWT auth token fixture
   - Added automated unit/integration tests for user registration, login, and protected /users/me endpoint
+  - Added end-to-end (E2E) integration tests for the shopping flow
+  - Implemented tests for viewing products, adding to cart, checkout, and payment processing
 
 ## Database
 
@@ -394,7 +396,17 @@ Step 14
   - Centralized fixtures handle automatic test database cleanup and dynamic token generation
   - All test suites (CRUD, DB, Schema, Auth) passing completely
      Verified through command ---> "docker compose exec web pytest" 
-     
+  Status: **Completed**
+
+
+## step 15 - E2E testing for the e-commerce flow successfully mplemented.
+Step 15
+  - test_shop.py verifies the complete lifecycle of a purchase
+  - Automated handling of Cart, Checkout, and Payment APIs using test user fixtures
+  - All tests passing correctly inside the Docker container
+       Verified through command ---> "docker compose exec web pytest" 
+  Status: **Completed**
+
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -458,6 +470,7 @@ docs/
 
 - Automated testing improvement
   - Set up automated testing with Pytest and write auth tests. [Done]
+  - Expand automated tests for shop modules (Cart, Order, Payment).[Done]
 - Inventory management
 - Shopping cart
     - Implement Cart module (Add, View, Remove items). [Done]
