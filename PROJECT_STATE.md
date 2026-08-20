@@ -142,6 +142,11 @@ Admin APIs:
   - Created mock payment module to process pending orders
   - Implemented POST /payment/process to validate orders, update status to 'paid', and generate mock transaction IDs
 
+## Set up automated testing with Pytest
+  - Set up Pytest and automated testing framework with Docker execution
+  - Implemented conftest.py with cleanups, test user factory fixture, and JWT auth token fixture
+  - Added automated unit/integration tests for user registration, login, and protected /users/me endpoint
+
 ## Database
 
 PostgreSQL is the primary relational database.
@@ -369,15 +374,27 @@ Step 12
   - Database tables 'orders' and 'order_items' created
   - Checkout API correctly migrates cart items to order items and calculates the total price
   - User's cart is successfully emptied upon order creation
+    Verified through Swagger.
+
+    Status: **Completed**
 
 
 ## step 13 - Mock Payment module implemented.
 Step 13
-
 - POST /payment/process successfully verifies pending orders
 - Changes order status to 'paid' and generates a UUID transaction ID
 - Prevented double-processing of already paid orders
+    Verified through Swagger.
 
+    Status: **Completed**
+
+## step 14 - Automated testing framework configured successfully.
+Step 14
+  - Pytest and httpx integrated into the backend environment
+  - Centralized fixtures handle automatic test database cleanup and dynamic token generation
+  - All test suites (CRUD, DB, Schema, Auth) passing completely
+     Verified through command ---> "docker compose exec web pytest" 
+     
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -440,6 +457,7 @@ docs/
 ### Planned Features
 
 - Automated testing improvement
+  - Set up automated testing with Pytest and write auth tests. [Done]
 - Inventory management
 - Shopping cart
     - Implement Cart module (Add, View, Remove items). [Done]
