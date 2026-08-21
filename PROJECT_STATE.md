@@ -152,6 +152,10 @@ Admin APIs:
 ## CI/CD Pipiline 
   - Configured GitHub Actions CI pipeline (.github/workflows/ci.yml)
   - Automated Docker container builds and Pytest execution on every push to main
+## Caching by Redis
+  - Integrated Redis caching service running on `backend_network`
+  - Implemented dynamic cache keys for GET /products/ supporting search and pagination
+  - Implemented automatic cache invalidation on POST /products/ when new products are created
 
 ## Database
 
@@ -428,6 +432,15 @@ Step 17
        Verified through command ---> "docker compose exec web pytest" 
   Status: **Completed**
 
+## step 18 - Redis caching implementation complete.
+Step 18
+  - Redis container configured on backend_network
+  - Cache and cache invalidation logic added to product catalog endpoints
+  - All 8 test suites passing inside Docker container
+  - All tests passing correctly inside the Docker container
+       Verified through command ---> "docker compose exec web pytest" 
+  Status: **Completed**
+
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -502,6 +515,7 @@ docs/
 - Shipping
 - Administration expansion
 - Redis caching
+  - Set up Redis caching for product catalog. [Done]
 - Structured logging
 - Monitoring and observability
 - CI/CD
