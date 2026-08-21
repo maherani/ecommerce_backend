@@ -157,6 +157,10 @@ Admin APIs:
   - Implemented dynamic cache keys for GET /products/ supporting search and pagination
   - Implemented automatic cache invalidation on POST /products/ when new products are created
 
+## Set Rate limit (5 request per minute)
+  - Implemented Rate Limiting using slowapi and Redis backend
+  - Secured /login endpoint against Brute Force attacks (5 requests per minute)
+
 ## Database
 
 PostgreSQL is the primary relational database.
@@ -441,6 +445,15 @@ Step 18
        Verified through command ---> "docker compose exec web pytest" 
   Status: **Completed**
 
+## step 19 - Rate Limiting successfully implemented.
+Step 19
+  - slowapi integrated with FastAPI app instance
+  - Redis configured as the storage backend for tracking request limits
+  - Login endpoint secured with a 5/minute request limit
+  - All tests passing with the new security constraints
+       Verified through command ---> "docker compose exec web pytest" 
+  Status: **Completed**
+
 ## Major Lessons Learned
 
 - Windows PostgreSQL occupied host port `5432`.
@@ -502,9 +515,6 @@ docs/
 
 ### Planned Features
 
-- Automated testing improvement
-  - Set up automated testing with Pytest and write auth tests. [Done]
-  - Expand automated tests for shop modules (Cart, Order, Payment).[Done]
 - Inventory management
 - Shopping cart
     - Implement Cart module (Add, View, Remove items). [Done]
@@ -514,30 +524,31 @@ docs/
   - Implement mock Payment simulation module. [Done]
 - Shipping
 - Administration expansion
-- Redis caching
-  - Set up Redis caching for product catalog. [Done]
 - Structured logging
 - Monitoring and observability
-- CI/CD
-  - Set up GitHub Actions CI workflow. [Done]
 - Production hardening
 - database Migration 
   - Set up database migrations with Alembic. [Done]
 ## Future Enhancements
-
 - Stronger password validation
 - Refresh tokens
 - Rate limiting
+  - Set up Rate Limiting for security. [Done]
 - Redis caching
+    - Set up Redis caching for product catalog. [Done]
 - Structured logging
 - Monitoring
 - Metrics
 - Distributed tracing
 - CI/CD
+    - Set up GitHub Actions CI workflow. [Done]
 - Production configuration
 - Security hardening
 - API versioning
 - Better automated test coverage
+    - Set up automated testing with Pytest and write auth tests. [Done]
+    - Expand automated tests for shop modules (Cart, Order, Payment)[Done]
+
 
 ## Next Recommended Step
 

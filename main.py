@@ -8,7 +8,9 @@ from app.modules.product import models as product_models
 from app.modules.cart import models as cart_models
 from app.modules.order import models as order_models
 from fastapi.middleware.cors import CORSMiddleware
-
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.rate_limit import limiter
 # ۲. سپس دستور ساخت جداول اجرا شود
 Base.metadata.create_all(bind=engine)
 
@@ -47,6 +49,8 @@ app.include_router(product_router)  # اضافه شدن این خط
 app.include_router(cart_router)
 app.include_router(order_router)
 app.include_router(payment_router)  # اضافه شد
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # یک مسیر ساده برای تست سلامت سرور (Health Check)
 @app.get("/")
 def health_check():

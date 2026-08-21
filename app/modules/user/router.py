@@ -1,6 +1,6 @@
 # app/modules/user/router.py
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status , Request
 from fastapi.security import OAuth2PasswordBearer , OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -9,7 +9,8 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.modules.user import crud, schemas
-
+from app.core.rate_limit import limiter
+from app.core.security import verify_password, create_access_token
 
 # Router for all user-related endpoints.
 router = APIRouter(
@@ -54,12 +55,12 @@ def create_user(
 
     return new_user
 
-@router.post(
-    "/login",
-    response_model=schemas.Token,
-)
+@router.post("/login", response_model=schemas.Token)
+@limiter.limit("5/minute")
+
 def login_user(
     # تغییر از UserLogin به فرم استاندارد OAuth2
+    request: Request,  # این پارامتر برای slowapi الزامی است تا IP را بخواند
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -69,24 +70,14 @@ def login_user(
     """
 
     # فرم استاندارد از فیلد username استفاده می‌کند، ما ایمیل را درون آن قرار می‌دهیم
-    user = crud.get_user_by_email(
-        db,
-        email=form_data.username,
-    )
-
-    if not user or not crud.verify_password(
-        form_data.password,
-        user.hashed_password,
-    ):
+    user = crud.get_user_by_email(db, email=form_data.username)
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    access_token = create_access_token(
-        data={"sub": user.email},
-    )
+    access_token = create_access_token(data={"sub": user.email})
 
     return {
         "access_token": access_token,
