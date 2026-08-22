@@ -40,6 +40,19 @@ services:
      networks:
       - backend_network
 
+  celery_worker:
+    build: .
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+    networks:
+      - backend_network
+
 networks:
    backend_network:
      driver: bridge
