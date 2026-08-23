@@ -4,7 +4,8 @@ from app.core.config import settings
 celery_app = Celery(
     "ecommerce_worker",
     broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL
+    backend=settings.REDIS_URL,
+    include=["app.tasks.email_tasks"]  # <--- این خط باید اضافه شود
 )
 
 celery_app.conf.update(
