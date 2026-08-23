@@ -4,6 +4,7 @@ from app.modules.user.models import User
 def test_database_creation():
     print("Connecting to database and creating tables...")
     try:
+	Base.metadata.drop_all(bind=engine)    # این خط را قبل از خط زیر اضافه کنید
         Base.metadata.create_all(bind=engine)
         print("Success! Table 'users' has been created successfully.")
     except Exception as e:
