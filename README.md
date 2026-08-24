@@ -262,6 +262,8 @@ Alembic is used for database schema migrations.
 
 Direct `create_all` schema management is no longer the application's migration strategy; schema changes are managed through Alembic migrations.
 
+The reconciliation migration `b8c2d1e4f6a7` creates the catalog, cart, and order tables required by the current models in a fresh database and adds `users.is_superuser`. It is safe for the historical database that already contained these business tables before Alembic was introduced.
+
 ## API
 
 Main endpoints currently include:
@@ -407,7 +409,7 @@ GitHub Actions workflow:
 .github/workflows/ci.yml
 ```
 
-The workflow builds the Docker environment and runs the Pytest suite on push / pull-request activity targeting `main`.
+The workflow builds the Docker environment, waits for PostgreSQL, applies `alembic upgrade head`, and runs the Pytest suite on push / pull-request activity targeting `main`.
 
 ## Development Workflow
 
@@ -471,13 +473,14 @@ Step 17 — Alembic Schema Management            ✅
 Step 18 — Redis Product Caching                ✅
 Step 19 — Redis Rate Limiting                  ✅
 Step 20 — Celery Background Worker             ✅
+Step 21 — Alembic Schema Reconciliation         ✅
 ```
 
 ## Project Status
 
-The latest completed development step is **Step 20 — Celery Background Worker**.
+The latest completed development step is **Step 21 — Alembic Schema Reconciliation and Migration-Aware CI**.
 
-The background-task infrastructure and registration-triggered welcome-email dispatch are verified by CI. The email implementation remains a simulation rather than a real email-provider integration.
+The database schema now reconciles with the current application models in fresh environments, and CI verifies migrations before tests. The welcome-email implementation remains a simulation rather than a real email-provider integration.
 
 ## Future Roadmap
 
