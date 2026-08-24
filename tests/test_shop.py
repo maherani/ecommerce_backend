@@ -126,3 +126,324 @@ def test_checkout_reduces_stock(client, auth_token):
     )
 
     assert updated_product["stock_quantity"] == initial_stock - 1
+def test_cancel_pending_order_restores_stock(client, auth_token):
+    """لغو سفارش pending باید موجودی محصول را برگرداند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    product_id = product["id"]
+    initial_stock = product["stock_quantity"]
+
+    # افزودن محصول به سبد
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product_id,
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    # Checkout
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order = checkout_res.json()
+    order_id = order["id"]
+
+    # موجودی باید یک واحد کم شده باشد
+    products_after_checkout = client.get("/products/").json()
+
+    product_after_checkout = next(
+        p for p in products_after_checkout
+        if p["id"] == product_id
+    )
+
+    assert product_after_checkout["stock_quantity"] == initial_stock - 1
+
+    # لغو سفارش
+    cancel_res = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cancel_res.status_code == 200
+
+    cancelled_order = cancel_res.json()
+
+    assert cancelled_order["id"] == order_id
+    assert cancelled_order["status"] == "cancelled"
+
+    # موجودی باید به مقدار اولیه برگردد
+    products_after_cancel = client.get("/products/").json()
+
+    product_after_cancel = next(
+        p for p in products_after_cancel
+        if p["id"] == product_id
+    )
+
+    assert product_after_cancel["stock_quantity"] == initial_stock
+def test_cancel_already_cancelled_order_fails(client, auth_token):
+    """سفارش cancelled نباید دوباره قابل لغو باشد."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    first_cancel = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert first_cancel.status_code == 200
+
+    second_cancel = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert second_cancel.status_code == 400
+    assert second_cancel.json()["detail"] == (
+        "Only pending orders can be cancelled"
+    )
+
+
+def test_cancel_paid_order_fails(client, auth_token):
+    """سفارش paid نباید در این مرحله قابل لغو باشد."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={
+            "order_id": order_id,
+            "card_number": "6037991122334455"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert payment_res.status_code == 200
+
+    cancel_res = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cancel_res.status_code == 400
+    assert cancel_res.json()["detail"] == (
+        "Only pending orders can be cancelled"
+    )
+
+def test_cancel_already_cancelled_order_fails(client, auth_token):
+    """سفارش cancelled نباید دوباره قابل لغو باشد."""
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    first_cancel = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert first_cancel.status_code == 200
+
+    second_cancel = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert second_cancel.status_code == 400
+    assert second_cancel.json()["detail"] == (
+        "Only pending orders can be cancelled"
+    )
+
+
+def test_cancel_paid_order_fails(client, auth_token):
+    """سفارش paid نباید در این مرحله قابل لغو باشد."""
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={
+            "order_id": order_id,
+            "card_number": "6037991122334455"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert payment_res.status_code == 200
+
+    cancel_res = client.post(
+        f"/orders/{order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cancel_res.status_code == 400
+    assert cancel_res.json()["detail"] == (
+        "Only pending orders can be cancelled"
+    )
+
+
+def test_cancel_other_users_order_fails(client, auth_token):
+    """کاربر نباید بتواند سفارش متعلق به کاربر دیگری را لغو کند."""
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    other_user_order_id = order_id + 999999
+
+    cancel_res = client.post(
+        f"/orders/{other_user_order_id}/cancel",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cancel_res.status_code == 404
+    assert cancel_res.json()["detail"] == "Order not found"

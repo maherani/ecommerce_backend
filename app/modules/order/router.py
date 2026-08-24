@@ -85,3 +85,57 @@ def get_my_orders(
 ):
     """مشاهده تمام سفارش‌های ثبت‌شده توسط کاربر جاری"""
     return db.query(models.Order).filter(models.Order.user_id == current_user.id).all()
+
+
+
+@router.post("/{order_id}/cancel", response_model=schemas.OrderResponse)
+def cancel_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """لغو سفارش pending و بازگرداندن موجودی محصولات"""
+
+    # پیدا کردن سفارش متعلق به کاربر جاری
+    order = db.query(models.Order).filter(
+        models.Order.id == order_id,
+        models.Order.user_id == current_user.id
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    # فقط سفارش‌های pending قابل لغو هستند
+    if order.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only pending orders can be cancelled"
+        )
+
+    # بازگرداندن موجودی محصولات با row-level locking
+    for item in order.items:
+        product = (
+            db.query(Product)
+            .filter(Product.id == item.product_id)
+            .with_for_update()
+            .first()
+        )
+
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product {item.product_id} not found"
+            )
+
+        product.stock_quantity += item.quantity
+
+    # تغییر وضعیت سفارش
+    order.status = "cancelled"
+
+    db.commit()
+    db.refresh(order)
+
+    return order
