@@ -1,16 +1,20 @@
 # app/modules/user/router.py
 
-from fastapi import APIRouter, Depends, HTTPException, status , Request
-from fastapi.security import OAuth2PasswordBearer , OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import create_access_token
-from app.modules.user import crud, schemas
 from app.core.rate_limit import limiter
-from app.core.security import verify_password, create_access_token
+from app.core.security import create_access_token, verify_password
+from app.modules.user import crud, schemas
+from app.tasks.email_tasks import send_welcome_email_task
+
+logger = logging.getLogger(__name__)
 
 # Router for all user-related endpoints.
 router = APIRouter(
@@ -29,10 +33,10 @@ def create_user(
     db: Session = Depends(get_db),
 ):
     """
-    Create a new user.
+    Create a new user and queue the welcome-email task.
 
-    The email must be unique. The password is hashed inside the CRUD layer
-    before the user is stored in PostgreSQL.
+    The registration response must not depend on the worker being available,
+    so a task-delivery failure is logged without rolling back the user.
     """
 
     # Check whether a user with this email already exists.
@@ -53,14 +57,22 @@ def create_user(
         user=user,
     )
 
+    try:
+        # Queue the slow welcome-email work outside the request/response cycle.
+        send_welcome_email_task.delay(new_user.email, new_user.email)
+    except Exception:
+        logger.exception(
+            "Welcome email could not be queued for newly registered user",
+            extra={"user_id": new_user.id},
+        )
+
     return new_user
+
 
 @router.post("/login", response_model=schemas.Token)
 @limiter.limit("5/minute")
-
 def login_user(
-    # تغییر از UserLogin به فرم استاندارد OAuth2
-    request: Request,  # این پارامتر برای slowapi الزامی است تا IP را بخواند
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
@@ -69,7 +81,6 @@ def login_user(
     (Using standard OAuth2 form data for Swagger compatibility)
     """
 
-    # فرم استاندارد از فیلد username استفاده می‌کند، ما ایمیل را درون آن قرار می‌دهیم
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -85,27 +96,25 @@ def login_user(
     }
 
 
-# مسیر دریافت توکن برای Swagger
+# Token endpoint for Swagger.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    تزریق وابستگی برای دریافت کاربر فعلی از طریق توکن
-    """
+    """Resolve the authenticated user from a JWT bearer token."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # رمزگشایی توکن
         payload = jwt.decode(
-            token, 
-            settings.SECRET_KEY, 
-            algorithms=[settings.ALGORITHM]
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
         )
         email: str = payload.get("sub")
         if email is None:
@@ -113,33 +122,28 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    # جستجوی کاربر در دیتابیس
     user = crud.get_user_by_email(db, email=email)
     if user is None:
         raise credentials_exception
-        
+
     return user
+
 
 @router.get(
     "/me",
     response_model=schemas.UserResponse,
 )
-
 def read_users_me(
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    """
-    دریافت اطلاعات پروفایل کاربر لاگین شده (مسیر محافظت‌شده)
-    """
+    """Return the profile of the authenticated user."""
     return current_user
 
 
 def get_current_admin_user(
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
-    """
-    تزریق وابستگی برای بررسی سطح دسترسی مدیر (Superuser)
-    """
+    """Authorize a superuser for admin-only operations."""
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -153,9 +157,7 @@ def get_current_admin_user(
     response_model=schemas.UserResponse,
 )
 def read_admin_data(
-    current_admin = Depends(get_current_admin_user)
+    current_admin=Depends(get_current_admin_user),
 ):
-    """
-    مسیر محافظت‌شده اختصاصی فقط برای کاربران مدیر
-    """
+    """Return protected admin-only data."""
     return current_admin
