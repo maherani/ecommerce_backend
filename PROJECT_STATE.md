@@ -31,13 +31,13 @@ The project is developed incrementally. Every completed step must be tested, doc
 - Step 17 — Alembic as the application's database schema management system
 - Step 18 — Redis caching for the product catalog
 - Step 19 — Redis-backed rate limiting
-- Step 20 — Celery background worker infrastructure and welcome-email task
+- Step 20 — Celery background worker infrastructure, registration-triggered welcome-email dispatch, and automated dispatch verification
 
 ### Current Step
 
-Step 20 is the latest completed development step.
+Step 20 is the latest completed and verified development step.
 
-The next step must be selected only after reviewing the current repository state and documentation.
+Welcome-email dispatch is now connected to successful user registration and is covered by an automated test. The next step must be selected only after reviewing the current repository state and documentation.
 
 ---
 
@@ -319,6 +319,8 @@ Current implementation:
 ```bash
 celery -A app.core.celery_app.celery_app worker --loglevel=info
 ```
+- Successful user registration dispatches the welcome-email task asynchronously.
+- A broker-delivery failure is logged and does not undo a successfully created user account.
 
 A welcome-email background task exists at:
 
@@ -686,8 +688,11 @@ Status: **Completed**
 - Added `send_welcome_email_task` in `app/tasks/email_tasks.py`
 - Current task simulates a slow welcome-email operation and returns a success result
 - Worker runs using the project's Docker image and shared environment
+- User registration queues the welcome-email task with Celery
+- Automated test verifies task dispatch without requiring a running worker
+- GitHub Actions CI run 15 completed successfully after the dispatch test was added
 
-Status: **Completed**
+Status: **Completed and verified**
 
 ---
 
@@ -785,7 +790,7 @@ app/modules/payment/
 
 ### Immediate
 
-- Review the current Step 20 implementation and test status before starting another feature.
+- Select and scope Step 21 only after reviewing the verified Step 20 implementation.
 - Keep `PROJECT_STATE.md` and `README.md` synchronized with the repository.
 - Verify the Celery worker and task execution end-to-end before treating background processing as production-ready.
 
