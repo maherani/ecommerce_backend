@@ -235,6 +235,8 @@ Current infrastructure includes:
 - JSON task serialization
 - UTC configuration
 - `send_welcome_email_task`
+- Successful user registration queues the task asynchronously.
+- If the broker cannot accept the task, the delivery error is logged without undoing the completed registration.
 
 The current welcome-email task intentionally simulates a slow email operation and logs a successful result. It does **not** send a real email yet.
 
@@ -387,6 +389,7 @@ The test suite covers areas including:
 - Payment
 - End-to-end shopping flow
 - Security-related behavior
+- Welcome-email task dispatch after registration
 
 Run the test suite inside the Docker application container:
 
@@ -474,7 +477,7 @@ Step 20 — Celery Background Worker             ✅
 
 The latest completed development step is **Step 20 — Celery Background Worker**.
 
-The current background task infrastructure is ready for further development, but the welcome-email implementation is still a simulation rather than a real email-provider integration.
+The background-task infrastructure and registration-triggered welcome-email dispatch are verified by CI. The email implementation remains a simulation rather than a real email-provider integration.
 
 ## Future Roadmap
 
