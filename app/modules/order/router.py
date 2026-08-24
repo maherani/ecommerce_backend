@@ -7,6 +7,7 @@ from app.modules.order import models, schemas
 from app.modules.cart.models import CartItem
 from app.modules.user.models import User
 from app.modules.user.router import get_current_user
+from app.modules.product.models import Product
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -15,27 +16,46 @@ def checkout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """تبدیل محتویات سبد خرید کاربر به سفارش و خالی کردن سبد خرید"""
+    """تبدیل محتویات سبد خرید کاربر به سفارش و کم کردن اتمیک موجودی"""
     # ۱. دریافت آیتم‌های سبد خرید کاربر
     cart_items = db.query(CartItem).filter(CartItem.user_id == current_user.id).all()
+
     if not cart_items:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cart is empty"
         )
 
-    # ۲. محاسبه قیمت کل و ساخت آیتم‌های سفارش
+    # ۲. بررسی و کاهش اتمیک موجودی + ساخت آیتم‌های سفارش
     total_price = 0.0
     order_items = []
 
     for item in cart_items:
-        item_total = item.product.price * item.quantity
+        product = (
+            db.query(Product)
+            .filter(
+                Product.id == item.product_id,
+                Product.stock_quantity >= item.quantity
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient stock for product {item.product_id}"
+            )
+
+        product.stock_quantity -= item.quantity
+
+        item_total = product.price * item.quantity
         total_price += item_total
-        
+
         order_item = models.OrderItem(
-            product_id=item.product_id,
+            product_id=product.id,
             quantity=item.quantity,
-            unit_price=item.product.price
+            unit_price=product.price
         )
         order_items.append(order_item)
 
@@ -49,12 +69,14 @@ def checkout(
     db.add(new_order)
 
     # ۴. پاک‌سازی سبد خرید کاربر
-    db.query(CartItem).filter(CartItem.user_id == current_user.id).delete()
+    db.query(CartItem).filter(
+        CartItem.user_id == current_user.id
+    ).delete()
 
     db.commit()
     db.refresh(new_order)
-    return new_order
 
+    return new_order
 
 @router.get("/", response_model=List[schemas.OrderResponse])
 def get_my_orders(

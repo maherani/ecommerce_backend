@@ -20,6 +20,7 @@ class Product(Base):
     title = Column(String, index=True, nullable=False)
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False)
+    stock_quantity = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, default=True)
     
     # کلید خارجی برای اتصال به جدول دسته‌بندی‌ها

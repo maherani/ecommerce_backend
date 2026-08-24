@@ -1,4 +1,5 @@
 import pytest
+from app.core.rate_limit import limiter
 from fastapi.testclient import TestClient
 from main import app
 from app.core.database import SessionLocal
@@ -20,6 +21,12 @@ def cleanup_test_users():
         db.commit()
     finally:
         db.close()
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit():
+    limiter.reset()
+    yield
+    limiter.reset()
 
 @pytest.fixture
 def test_user(client):

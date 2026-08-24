@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 # ==========================
@@ -24,6 +24,7 @@ class ProductBase(BaseModel):
     title: str
     description: Optional[str] = None
     price: float
+    stock_quantity: int = Field(ge=0, default=0)
     is_active: bool = True
     category_id: int
 
