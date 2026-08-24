@@ -29,5 +29,10 @@ jobs:
       - name: Build and start Docker containers
         run: docker compose up -d --build
 
+      - name: Apply database migrations
+        run: |
+          until docker compose exec -T db sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'; do sleep 1; done
+          docker compose exec -T web alembic upgrade head
+
       - name: Run Pytest
         run: docker compose exec -T web pytest
