@@ -2,15 +2,40 @@
 
 ## 1. Objective
 
-Build a production-oriented e-commerce backend using FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT authentication, Alembic, Docker, automated testing, CI/CD, caching, rate limiting, background task processing, inventory management, and production-readiness practices.
+Build a production-oriented e-commerce backend using FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT authentication, Alembic, Docker, automated testing, CI/CD, caching, rate limiting, background task processing, inventory management, payment persistence, and production-readiness practices.
 
-The project is developed incrementally. Every completed step must be tested, documented, committed, and pushed to GitHub before moving to the next step.
+Every completed step must be implemented, tested, documented, committed, pushed, and verified before moving to the next step.
 
----
+## 2. Current Architecture
 
-## 2. Current Project Status
+```text
+Client / Frontend
+       |
+       v
+    FastAPI (web)
+       |
+       +---- User Module
+       +---- Product Module
+       +---- Cart Module
+       +---- Order Module
+       |       +---- OrderItem
+       |       +---- Shipping (1:1)
+       |       +---- Payment  (1:1)
+       +---- Rate Limiting
+       +---- Background Tasks
 
-### Completed Steps
+                 |                 |
+                 v                 v
+             PostgreSQL          Redis
+
+Docker Compose:
+    db ------------- PostgreSQL
+    redis ---------- Redis
+    web ------------ FastAPI
+    celery_worker -- Celery Worker
+```
+
+## 3. Completed Steps
 
 - Step 1 — Project setup and initial inspection
 - Step 2 — Configuration and security
@@ -21,311 +46,76 @@ The project is developed incrementally. Every completed step must be tested, doc
 - Step 7 — JWT protected routes
 - Step 8 — RBAC / Admin authorization
 - Step 9 — Product and Category catalog
-- Step 10 — Product catalog search, pagination, and category filtering
+- Step 10 — Product search, pagination, and category filtering
 - Step 11 — Shopping cart
 - Step 12 — Order checkout and order history
 - Step 13 — Mock payment processing
-- Step 14 — Pytest automated testing framework
+- Step 14 — Pytest automated testing
 - Step 15 — End-to-end shopping flow tests
 - Step 16 — GitHub Actions CI
-- Step 17 — Alembic as the application's database schema management system
-- Step 18 — Redis caching for the product catalog
+- Step 17 — Alembic schema management
+- Step 18 — Redis product caching
 - Step 19 — Redis-backed rate limiting
 - Step 20 — Celery background worker
 - Step 21 — Alembic schema reconciliation and migration-aware CI
 - Step 22 — Inventory management and atomic stock reservation
 - Step 23 — Order cancellation and stock restoration
+- Step 24 — Order lifecycle and admin order management
+- Step 25 — Shipping and delivery management
+- Step 30 — Persistent payment records
 
-### Current Step
+## 4. Current Project Status
 
-Step 24 is the current development step and has been implemented and verified locally, but has not yet been committed or pushed.
+### Step 30 — Persistent Payment Records
 
-Order lifecycle management is now centralized with explicit status-transition rules. Admin users can update order status through a protected endpoint, while invalid transitions and non-admin access are rejected.
+Step 30 adds a persistent Payment domain entity backed by PostgreSQL.
 
-The valid lifecycle is:
+Implemented:
+
+- `Payment` SQLAlchemy model.
+- One-to-one `Order` ↔ `Payment` relationship.
+- Payment amount persistence using the order total.
+- Payment status persistence.
+- Unique mock transaction ID generation.
+- `created_at`, `paid_at`, and `refunded_at` fields.
+- Protection against paying an order that is not `pending`.
+- Protection against duplicate payment processing.
+- Ownership validation so users cannot pay another user's order.
+- Payment record persisted before returning the successful response.
+- Alembic migration `cff58edd10a9_add_payments_table.py`.
+
+Payment endpoint:
 
 ```text
-pending → paid → processing → shipped → delivered
-   │
-   └────────────→ cancelled
+POST /payment/process
 ```
 
-Order cancellation remains limited to `pending` orders and restores reserved stock using row-level locking.
-
-Latest verified full test result:
+Current payment flow:
 
 ```text
-18 passed
+pending order
+      |
+      v
+POST /payment/process
+      |
+      +--> validate ownership
+      +--> validate pending state
+      +--> reject existing payment
+      +--> generate transaction_id
+      +--> create Payment(status=paid)
+      +--> set order.status = paid
+      +--> commit transaction
+      |
+      v
+successful payment response
 ```
 
----
+The gateway remains a mock. Real provider integration and real refund processing are not implemented yet.
 
-## 3. Current Architecture
-
-```text
-Client / Frontend
-       |
-       v
-    FastAPI (web)
-       |
-       +---- User Module
-       |       +---- Registration
-       |       +---- Login
-       |       +---- JWT authentication
-       |       +---- Current user
-       |       +---- Admin authorization
-       |
-       +---- Product Module
-       |       +---- Categories
-       |       +---- Products
-       |       +---- Search
-       |       +---- Pagination
-       |       +---- Category filtering
-       |       +---- Inventory / stock quantity
-       |       +---- Redis caching
-       |
-       +---- Cart Module
-       |       +---- User-specific cart
-       |       +---- Add / increment
-       |       +---- Stock validation
-       |       +---- View
-       |       +---- Remove
-       |
-       +---- Order Module
-       |       +---- Checkout
-       |       +---- Cancellation
-       |       +---- Lifecycle management
-       |       +---- Admin status management
-       |       +---- Order items
-       |       +---- Price locking
-       |       +---- Atomic stock reservation
-       |       +---- Stock restoration on cancellation
-       |       +---- Order history
-       |
-       +---- Payment Module
-       |       +---- Mock payment processing
-       |       +---- Transaction ID generation
-       |
-       +---- Rate Limiting
-       |       +---- SlowAPI
-       |       +---- Redis storage
-       |
-       +---- Background Tasks
-               +---- Celery
-               +---- Welcome-email task
-
-                 |                 |
-                 v                 v
-             PostgreSQL          Redis
-                 |                 |
-                 +-----------------+
-
-Docker Compose services:
-
-    db ------------- PostgreSQL
-    redis ---------- Redis
-    web ------------ FastAPI
-    celery_worker -- Celery Worker
-```
-
----
-
-## 4. Technology Stack
-
-- Python 3.12 slim Docker base image
-- FastAPI 0.104.1
-- Uvicorn
-- PostgreSQL 15 Alpine
-- SQLAlchemy 2.x
-- Redis 7 Alpine
-- Redis Python client
-- JWT authentication
-- Alembic 1.13.1
-- Docker
-- Docker Compose
-- Pytest
-- HTTPX
-- SlowAPI
-- Celery 5.3.6
-- Swagger / OpenAPI
-- GitHub Actions
-
----
-
-## 5. Implemented Features
-
-### 5.1 Application
-
-- FastAPI application
-- Uvicorn development server
-- Environment-based configuration
-- Swagger / OpenAPI documentation
-- Health endpoint
-- SQLAlchemy database session management
-- Dockerized application
-
-### 5.2 User Management
-
-- User registration
-- Duplicate email detection
-- Password hashing
-- User login
-- JWT access token generation
-- Invalid credential handling
-- Current authenticated user endpoint
-- `is_superuser` support
-
-### 5.3 Authentication and Authorization
-
-- JWT Bearer authentication
-- `get_current_user` dependency
-- Protected routes
-- OAuth2 password form compatibility using `python-multipart`
-- `get_current_admin_user` dependency
-- Admin-only protected endpoints
-- Regular users receive HTTP 403 on admin-only endpoints
-- Superusers receive HTTP 200 on admin-only endpoints
-
-### 5.4 Product Catalog
-
-Product fields:
-
-- `id`
-- `title`
-- `description`
-- `price`
-- `stock_quantity`
-- `is_active`
-- `category_id`
-
-Catalog endpoints:
-
-- `GET /categories/`
-- `POST /categories/` — admin only
-- `GET /products/`
-- `POST /products/` — admin only
-
-Product listing supports:
-
-- `skip` / `limit` pagination
-- `search` filtering by title
-- Case-insensitive title search using SQLAlchemy `ilike`
-- `category_id` filtering
-- Redis caching
-- Cache invalidation after product creation
-
-### 5.5 Shopping Cart
-
-- `CartItem` SQLAlchemy model
-- User-specific cart isolation
-- `GET /cart/`
-- `POST /cart/`
-- `DELETE /cart/{item_id}`
-- JWT protection
-- Stock validation when adding a product
-- Stock validation when incrementing an existing cart item
-- HTTP 400 with `Insufficient stock` when requested quantity exceeds stock
-
-### 5.6 Orders
-
-- `Order` SQLAlchemy model
-- `OrderItem` SQLAlchemy model
-- Checkout flow
-- `POST /orders/checkout`
-- `GET /orders/`
-- Order total calculation
-- Unit-price locking
-- Cart cleanup after successful checkout
-- User order history
-
-#### Inventory Reservation During Checkout
-
-Checkout uses row-level locking with SQLAlchemy `with_for_update()`.
-
-The checkout transaction:
-
-1. Retrieves the user's cart.
-2. Locks each required product row.
-3. Verifies sufficient stock.
-4. Decrements `stock_quantity`.
-5. Creates order items.
-6. Creates the order.
-7. Clears the cart.
-8. Commits the transaction.
-
-If stock is insufficient, checkout returns HTTP 400 and the transaction is rolled back.
-
-#### Order Cancellation and Stock Restoration
-
-Step 23 adds:
-
-- `POST /orders/{order_id}/cancel`
-- Order ownership validation
-- Cancellation allowed only while status is `pending`
-- Product row locking with `with_for_update()` during stock restoration
-- Restoration of `OrderItem.quantity` back to `Product.stock_quantity`
-- Order status transition `pending → cancelled`
-- Transactional update of stock and order status
-- Rejection of cancellation for `paid` or already-cancelled orders
-- HTTP 404 for orders that do not belong to the current user
-
-#### Order Lifecycle and Admin Management
-
-Step 24 adds centralized lifecycle rules for order status transitions:
-
-- `pending → paid`
-- `pending → cancelled`
-- `paid → processing`
-- `processing → shipped`
-- `shipped → delivered`
-
-Terminal states are `delivered` and `cancelled`. Invalid transitions return HTTP 400.
-
-Admin status endpoint:
-
-- `PATCH /orders/{order_id}/status`
-- Requires `get_current_admin_user`
-- Validates the requested transition against `ALLOWED_STATUS_TRANSITIONS`
-- Returns HTTP 404 for unknown orders
-- Returns HTTP 403 for regular users
-
-### 5.7 Mock Payment
-
-- `POST /payment/process`
-- Pending-order validation
-- Successful payment changes order status to `paid`
-- UUID transaction ID generation
-- Prevention of duplicate payment processing
-
-### 5.8 Automated Testing
-
-Pytest coverage includes:
-
-- Authentication
-- Registration
-- Login
-- Protected routes
-- Admin authorization
-- Product operations
-- Cart operations
-- Checkout
-- Payment
-- Inventory validation
-- Stock reduction
-- Order cancellation
-- Stock restoration after cancellation
-- Invalid cancellation states
-- Order ownership validation
-- Admin order lifecycle transitions
-- Invalid order status transitions
-- Regular-user RBAC for order status updates
-- Unknown-order handling for admin status updates
-- End-to-end shopping flow
-
-Latest full test result:
+### Latest Verification
 
 ```text
-18 passed
+30 passed
 ```
 
 Verification command:
@@ -334,91 +124,197 @@ Verification command:
 docker compose exec web pytest -q
 ```
 
-### 5.9 CI/CD
+Migration verification:
 
-Workflow:
-
-```text
-.github/workflows/ci.yml
+```bash
+docker compose exec web alembic current
+docker compose exec db psql -U shop_admin -d ecommerce_db -c "\\d payments"
 ```
 
-The workflow:
-
-- Checks out the repository
-- Creates `.env` from GitHub Secrets
-- Builds and starts Docker Compose
-- Waits for PostgreSQL
-- Runs `alembic upgrade head`
-- Runs Pytest
-
-CI triggers on pushes and pull requests targeting `main`.
-
-### 5.10 Database Migrations
-
-Alembic is the application's database schema management system.
-
-Migrations include:
+Expected migration head:
 
 ```text
-aee86fd59c30
-b8c2d1e4f6a7
-3105be9533db_add_product_stock_quantity.py
+cff58edd10a9
 ```
 
-The inventory migration adds `products.stock_quantity`.
+## 5. Implemented Features
 
-No separate schema migration is required for Step 23 or Step 24 because the order cancellation and lifecycle management features use the existing `orders`, `order_items`, and `products` tables.
+### Authentication
 
-### 5.11 Redis Caching
+- Registration
+- Login
+- Password hashing
+- JWT authentication
+- Current-user dependency
+- Admin/superuser authorization
 
-- Redis 7 Docker service
-- Product catalog caching
-- Dynamic cache keys
-- Pagination-aware caching
-- Search-aware caching
-- Category-aware caching
-- Cache invalidation after product creation
+### Product Catalog
 
-### 5.12 Inventory Management
+- Categories
+- Products
+- Pagination
+- Search
+- Category filtering
+- Redis caching
+- Cache invalidation
+- Product stock quantity
 
-- Product-level `stock_quantity`
-- Cart-level stock validation
-- Atomic checkout stock decrement
-- Row-level locking during checkout
-- Transaction rollback on insufficient stock
-- Stock restoration when a pending order is cancelled
-- Row-level locking during stock restoration
+### Cart
 
-### 5.13 Rate Limiting
+- User-specific cart
+- Add/increment/remove
+- Stock validation
+- Insufficient-stock protection
 
-SlowAPI uses Redis as the storage backend.
+### Orders
 
-Login limit:
+- Checkout
+- Order history
+- Order items
+- Unit-price locking
+- Atomic stock reservation with row-level locking
+- Transaction rollback on failed checkout
+- Pending-order cancellation
+- Stock restoration on cancellation
+- Order ownership validation
+- Admin lifecycle management
+
+Valid lifecycle:
 
 ```text
-5 requests per minute
+pending → paid → processing → shipped → delivered
+   |
+   └────────────→ cancelled
 ```
 
-### 5.14 Celery Background Processing
+Terminal states:
 
-- Celery 5.3.6
+```text
+delivered
+cancelled
+```
+
+Admin endpoint:
+
+```text
+PATCH /orders/{order_id}/status
+```
+
+### Shipping
+
+Step 25 introduced a dedicated Shipping entity.
+
+Fields:
+
+```text
+address
+city
+postal_code
+carrier
+tracking_number
+shipped_at
+delivered_at
+```
+
+Features:
+
+- One-to-one Order ↔ Shipping relationship
+- Shipping creation during checkout
+- Shipping data in OrderResponse
+- Admin carrier/tracking management
+- `shipped_at` on transition to `shipped`
+- `delivered_at` on transition to `delivered`
+- Failed-checkout rollback coverage
+
+Endpoint:
+
+```text
+PATCH /shipping/{order_id}
+```
+
+Migration:
+
+```text
+40f98fd888bb_add_shipping_table.py
+```
+
+### Payment
+
+Step 30 introduced persistent payment records.
+
+Payment fields:
+
+```text
+id
+order_id
+amount
+status
+transaction_id
+created_at
+paid_at
+refunded_at
+```
+
+Migration:
+
+```text
+cff58edd10a9_add_payments_table.py
+```
+
+Database constraints include:
+
+- Primary key on `id`
+- Foreign key `order_id -> orders.id`
+- Unique `order_id`
+- Unique `transaction_id`
+
+### Rate Limiting
+
+- SlowAPI
+- Redis-backed storage
+- Login rate limit
+
+### Celery
+
 - Redis broker
 - Redis result backend
-- JSON serialization
-- UTC configuration
-- Dedicated `celery_worker` service
-- `send_welcome_email_task`
-- Asynchronous task dispatch after registration
+- Dedicated worker service
+- Welcome-email background task simulation
 
-The welcome-email task is still a simulation and does not send real email.
+## 6. Automated Testing
 
----
+Pytest coverage includes:
 
-## 6. Database
+- Authentication
+- Registration/login
+- Protected routes
+- Admin RBAC
+- Products
+- Cart
+- Checkout
+- Inventory validation
+- Atomic stock reservation
+- Order cancellation
+- Stock restoration
+- Order lifecycle
+- Shipping creation
+- Shipping rollback
+- Shipping admin RBAC
+- Shipping lifecycle timestamps
+- Payment persistence
+- Duplicate payment protection
+- Payment ownership protection
+- End-to-end purchase flow
 
-PostgreSQL is the primary relational database.
+Latest full suite:
 
-Current known tables:
+```text
+30 passed
+```
+
+## 7. Database
+
+Current application tables:
 
 ```text
 users
@@ -427,140 +323,60 @@ products
 cart_items
 orders
 order_items
+shipping
+payments
 alembic_version
 ```
 
-SQLAlchemy is the ORM.
+Alembic is the authoritative schema-management mechanism.
 
-Alembic manages schema changes.
-
-The application does not use direct `create_all()` as its migration strategy.
-
----
-
-## 7. Docker
-
-Current Docker Compose services:
+Current migration chain relevant to the latest domain additions:
 
 ```text
-db
-redis
-web
-celery_worker
+40f98fd888bb_add_shipping_table.py
+                |
+                v
+cff58edd10a9_add_payments_table.py
+                |
+                v
+              HEAD
 ```
 
-### db
+## 8. Technology Stack
 
+- Python 3.12 slim
+- FastAPI 0.104.1
+- Uvicorn
 - PostgreSQL 15 Alpine
-- Persistent volume
-- Internal network
-- Host port exposure disabled
-
-### redis
-
+- SQLAlchemy 2.x
 - Redis 7 Alpine
-- Internal network
-- Host port 6379 currently mapped
-- Used by caching, rate limiting, and Celery
+- JWT
+- Alembic 1.13.1
+- Docker / Docker Compose
+- Pytest / HTTPX
+- SlowAPI
+- Celery 5.3.6
+- Swagger / OpenAPI
+- GitHub Actions
 
-### web
+## 9. Repository Status
 
-- Project Docker image
-- FastAPI + Uvicorn
-- Port 8000
-- `.env`
-- Depends on PostgreSQL and Redis
+Documentation on GitHub has been updated for Step 30.
 
-### celery_worker
-
-- Same project image
-- Celery worker
-- Depends on Redis and PostgreSQL
-- Shares the internal network
-
----
-
-## 8. Current Known Good State
-
-### Step 20 — Celery Background Worker
-
-Status: **Completed and verified**
-
-### Step 21 — Alembic Schema Reconciliation and Migration-Aware CI
-
-- Fresh environments receive the schema required by current models.
-- Historical databases remain compatible with the reconciliation migration.
-- CI applies `alembic upgrade head` before tests.
-
-Status: **Completed and verified**
-
-### Step 22 — Inventory Management and Atomic Stock Reservation
-
-- Added `Product.stock_quantity`.
-- Added stock validation in cart operations.
-- Added atomic stock decrement during checkout.
-- Added row-level locking during checkout.
-- Added inventory tests.
-
-Latest Step 22 verification:
+The application implementation for Step 30 consists of:
 
 ```text
-10 passed
+alembic/env.py
+app/modules/order/models.py
+app/modules/payment/models.py
+app/modules/payment/router.py
+tests/test_shop.py
+alembic/versions/cff58edd10a9_add_payments_table.py
 ```
 
-Status: **Completed and verified**
+Before declaring the repository milestone fully synchronized, confirm that the local Step 30 implementation has been committed and pushed and that GitHub Actions is green.
 
-### Step 23 — Order Cancellation and Stock Restoration
-
-Implemented:
-
-- `POST /orders/{order_id}/cancel`
-- Current-user ownership validation
-- Pending-only cancellation
-- Product row locking with `with_for_update()`
-- Stock restoration from order items
-- `pending → cancelled` status transition
-- Rejection of already-cancelled orders
-- Rejection of paid orders
-- Rejection of orders belonging to another user
-- Automated tests for cancellation and stock restoration
-
-Latest Step 23 verification:
-
-```text
-8 shop tests passed
-14 full-project tests passed
-```
-
-Status: **Completed and verified locally**
-
-### Step 24 — Order Lifecycle and Admin Order Management
-
-Implemented:
-
-- Centralized `ALLOWED_STATUS_TRANSITIONS` rules
-- Valid lifecycle: `pending → paid → processing → shipped → delivered`
-- Cancellation branch: `pending → cancelled`
-- Terminal `delivered` and `cancelled` states
-- `PATCH /orders/{order_id}/status` admin endpoint
-- Admin authorization through `get_current_admin_user`
-- Rejection of invalid status transitions with HTTP 400
-- Rejection of regular-user status changes with HTTP 403
-- Unknown-order handling with HTTP 404
-- Admin test fixture for authenticated status-management tests
-- Automated lifecycle and RBAC test coverage
-
-Latest Step 24 verification:
-
-```text
-18 passed
-```
-
-Status: **Implemented and verified locally — pending commit/push**
-
----
-
-## 9. Major Lessons Learned
+## 10. Major Lessons Learned
 
 - Redis is shared by product caching, rate limiting, and Celery.
 - Alembic is the authoritative schema-management mechanism.
@@ -571,176 +387,60 @@ Status: **Implemented and verified locally — pending commit/push**
 - Cancellation must be restricted to valid order states.
 - Order ownership must be checked before allowing cancellation.
 - Stock restoration should use row-level locking for consistency with checkout.
-- The current payment implementation is a mock and does not include real refunds.
-- Because real payment/refund integration is not implemented yet, paid orders are not cancellable.
-- Order status transitions should be centralized rather than duplicated across endpoints.
-- Admin-only lifecycle changes should use the existing RBAC dependency.
+- A payment should be persisted as a domain entity rather than represented only by a response.
+- `order_id` being unique enforces the one-payment-per-order rule at the database level.
+- `transaction_id` must be unique to avoid duplicate transaction identifiers.
+- The current payment gateway is intentionally a mock; real gateway/refund integration is future work.
 
----
-
-## 10. Repository Status
-
-Repository:
+## 11. Current Known Good State
 
 ```text
-maherani/ecommerce_backend
+Step 25 — Shipping and Delivery Management     COMPLETED
+Step 30 — Persistent Payment Records            IMPLEMENTED
+Tests                                            30 passed
+Alembic head                                    cff58edd10a9
 ```
-
-Branch:
-
-```text
-main
-```
-
-Latest completed remote development milestone:
-
-```text
-Step 23 — Order Cancellation and Stock Restoration
-```
-
-Current local development milestone:
-
-```text
-Step 24 — Order Lifecycle and Admin Order Management
-```
-
-Step 24 code changes are currently in the local working tree and have not yet been committed or pushed.
-
-Current Step 24 modified files:
-
-```text
-app/modules/order/router.py
-tests/conftest.py
-tests/test_shop.py
-```
-
-Current verification:
-
-```text
-18 passed
-```
-
----
-
-## 11. Important Project Files
-
-```text
-PROJECT_STATE.md
-README.md
-Dockerfile
-docker-compose.yml
-requirements.txt
-alembic.ini
-alembic/
-app/
-tests/
-.github/workflows/ci.yml
-```
-
-Important business modules:
-
-```text
-app/modules/user/
-app/modules/product/
-app/modules/cart/
-app/modules/order/
-app/modules/payment/
-```
-
-Important tests:
-
-```text
-tests/conftest.py
-tests/test_shop.py
-```
-
-`PROJECT_STATE.md` is the primary project-memory document and must remain synchronized with the actual repository state.
-
----
 
 ## 12. Pending Work
 
-### Immediate
-
-- Run final Step 24 diff and test checks.
-- Commit Step 24 changes.
-- Push Step 24 to GitHub.
-- Verify GitHub Actions for the Step 24 commit.
-- Confirm the local working tree is synchronized with `main`.
-- Select Step 25 only after repository and CI verification.
-
-### Planned Features
-
-- Real payment gateway and refund integration
-- Shipping management
-- Administration expansion
-- Real email delivery integration
-- Structured logging
-- Monitoring and observability
-- Metrics
-- Distributed tracing
-- Production hardening
-- Production configuration
-- Security hardening
-- API versioning
-- Expanded automated test coverage
-- Advanced inventory reservation and release policies
-- Celery retry policies and task monitoring
-- Additional background workflows
-
----
+- Synchronize Step 30 implementation with GitHub if local changes are still unpushed.
+- Confirm green CI for the Step 30 commit.
+- Continue with the next planned development step only after repository synchronization.
 
 ## 13. Future Enhancements
 
-- Stronger password validation
-- Refresh tokens
 - Real payment gateway integration
 - Real refund workflow
-- Real email provider integration
-- Shipping management
-- Inventory reservation expiration
-- Stock restoration after additional order states
-- Inventory audit history
-- Administration inventory endpoints
+- Payment provider webhooks
+- Idempotency keys for payment requests
+- Payment audit history
+- Real email provider
+- Refresh tokens
 - Structured logging
-- Monitoring
-- Metrics
+- Metrics and monitoring
 - Distributed tracing
 - Production configuration
 - Security hardening
 - API versioning
-- Expanded automated test coverage
-
----
+- Inventory audit history
+- Advanced reservation/release policies
+- Celery retry policies and monitoring
 
 ## 14. Next Recommended Step
 
-Before starting Step 25:
+After Step 30 is committed, pushed, and verified by green GitHub Actions, continue to the next planned development milestone.
 
-1. Commit and push Step 24.
-2. Verify GitHub Actions for the Step 24 commit.
-3. Verify the remote repository matches the local milestone.
-4. Review the current order/payment/inventory architecture.
-5. Select Step 25 based on the actual repository state.
+Do not start the next feature while the current implementation, tests, documentation, Git state, and CI status are inconsistent.
 
-Do not start the next feature blindly.
+## 15. Notes For Future Sessions
 
----
+Always begin by checking:
 
-## 15. Development Rules
+```bash
+git status --short
+git log -1 --oneline
+docker compose exec web pytest -q
+docker compose exec web alembic current
+```
 
-1. No step is complete without successful tests.
-2. Do not move to the next step before the current step is tested.
-3. Documentation must be updated during development.
-4. Use one recommended solution instead of unnecessary alternatives.
-5. Add useful comments to new or modified code.
-6. Commit and push after every completed step.
-7. Keep `PROJECT_STATE.md` synchronized with the real repository state.
-8. Inspect existing code before modifying it.
-9. Do not remove data or functionality without verifying its purpose and impact.
-10. Review Git changes before committing.
-11. Review documentation before every push.
-12. Use Alembic for database schema changes.
-13. Verify inventory and order-state transitions with automated tests.
-14. Keep documentation chronological and consistent with the repository.
-15. Verify CI after each completed development step.
+Then compare the local state with `PROJECT_STATE.md` and the latest GitHub state before making changes.
