@@ -682,3 +682,4 @@ Do not start the next feature blindly.
 13. Verify inventory and order-state transitions with automated tests.
 14. Keep documentation chronological and consistent with the repository.
 15. Verify CI after each completed development step.
+
