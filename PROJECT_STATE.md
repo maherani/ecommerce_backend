@@ -38,18 +38,24 @@ The project is developed incrementally. Every completed step must be tested, doc
 
 ### Current Step
 
-Step 23 is the latest completed and verified development step.
+Step 24 is the current development step and has been implemented and verified locally, but has not yet been committed or pushed.
 
-Order cancellation is now implemented for pending orders.
+Order lifecycle management is now centralized with explicit status-transition rules. Admin users can update order status through a protected endpoint, while invalid transitions and non-admin access are rejected.
 
-The cancellation endpoint verifies order ownership, accepts cancellation only for `pending` orders, locks each related product row with SQLAlchemy `with_for_update()`, restores the reserved stock, changes the order status to `cancelled`, and commits the changes in one transaction.
+The valid lifecycle is:
 
-Paid and already-cancelled orders cannot be cancelled. Requests for orders that do not belong to the current user return HTTP 404.
+```text
+pending → paid → processing → shipped → delivered
+   │
+   └────────────→ cancelled
+```
+
+Order cancellation remains limited to `pending` orders and restores reserved stock using row-level locking.
 
 Latest verified full test result:
 
 ```text
-14 passed
+18 passed
 ```
 
 ---
@@ -88,6 +94,8 @@ Client / Frontend
        +---- Order Module
        |       +---- Checkout
        |       +---- Cancellation
+       |       +---- Lifecycle management
+       |       +---- Admin status management
        |       +---- Order items
        |       +---- Price locking
        |       +---- Atomic stock reservation
@@ -261,6 +269,26 @@ Step 23 adds:
 - Rejection of cancellation for `paid` or already-cancelled orders
 - HTTP 404 for orders that do not belong to the current user
 
+#### Order Lifecycle and Admin Management
+
+Step 24 adds centralized lifecycle rules for order status transitions:
+
+- `pending → paid`
+- `pending → cancelled`
+- `paid → processing`
+- `processing → shipped`
+- `shipped → delivered`
+
+Terminal states are `delivered` and `cancelled`. Invalid transitions return HTTP 400.
+
+Admin status endpoint:
+
+- `PATCH /orders/{order_id}/status`
+- Requires `get_current_admin_user`
+- Validates the requested transition against `ALLOWED_STATUS_TRANSITIONS`
+- Returns HTTP 404 for unknown orders
+- Returns HTTP 403 for regular users
+
 ### 5.7 Mock Payment
 
 - `POST /payment/process`
@@ -288,12 +316,16 @@ Pytest coverage includes:
 - Stock restoration after cancellation
 - Invalid cancellation states
 - Order ownership validation
+- Admin order lifecycle transitions
+- Invalid order status transitions
+- Regular-user RBAC for order status updates
+- Unknown-order handling for admin status updates
 - End-to-end shopping flow
 
 Latest full test result:
 
 ```text
-14 passed
+18 passed
 ```
 
 Verification command:
@@ -335,7 +367,7 @@ b8c2d1e4f6a7
 
 The inventory migration adds `products.stock_quantity`.
 
-No separate schema migration is required for Step 23 because order cancellation uses the existing `orders`, `order_items`, and `products` tables.
+No separate schema migration is required for Step 23 or Step 24 because the order cancellation and lifecycle management features use the existing `orders`, `order_items`, and `products` tables.
 
 ### 5.11 Redis Caching
 
@@ -502,6 +534,30 @@ Latest Step 23 verification:
 
 Status: **Completed and verified locally**
 
+### Step 24 — Order Lifecycle and Admin Order Management
+
+Implemented:
+
+- Centralized `ALLOWED_STATUS_TRANSITIONS` rules
+- Valid lifecycle: `pending → paid → processing → shipped → delivered`
+- Cancellation branch: `pending → cancelled`
+- Terminal `delivered` and `cancelled` states
+- `PATCH /orders/{order_id}/status` admin endpoint
+- Admin authorization through `get_current_admin_user`
+- Rejection of invalid status transitions with HTTP 400
+- Rejection of regular-user status changes with HTTP 403
+- Unknown-order handling with HTTP 404
+- Admin test fixture for authenticated status-management tests
+- Automated lifecycle and RBAC test coverage
+
+Latest Step 24 verification:
+
+```text
+18 passed
+```
+
+Status: **Implemented and verified locally — pending commit/push**
+
 ---
 
 ## 9. Major Lessons Learned
@@ -516,7 +572,9 @@ Status: **Completed and verified locally**
 - Order ownership must be checked before allowing cancellation.
 - Stock restoration should use row-level locking for consistency with checkout.
 - The current payment implementation is a mock and does not include real refunds.
-- Because real payment/refund integration is not implemented yet, paid orders are not cancellable in Step 23.
+- Because real payment/refund integration is not implemented yet, paid orders are not cancellable.
+- Order status transitions should be centralized rather than duplicated across endpoints.
+- Admin-only lifecycle changes should use the existing RBAC dependency.
 
 ---
 
@@ -537,28 +595,29 @@ main
 Latest completed remote development milestone:
 
 ```text
-Step 22 — Inventory Management and Atomic Stock Reservation
+Step 23 — Order Cancellation and Stock Restoration
 ```
 
 Current local development milestone:
 
 ```text
-Step 23 — Order Cancellation and Stock Restoration
+Step 24 — Order Lifecycle and Admin Order Management
 ```
 
-Step 23 has been committed and pushed to GitHub.
+Step 24 code changes are currently in the local working tree and have not yet been committed or pushed.
 
-Current Step 23 modified files were:
+Current Step 24 modified files:
 
 ```text
 app/modules/order/router.py
+tests/conftest.py
 tests/test_shop.py
 ```
 
 Current verification:
 
 ```text
-14 passed
+18 passed
 ```
 
 ---
@@ -603,9 +662,12 @@ tests/test_shop.py
 
 ### Immediate
 
-- Verify the GitHub Actions result for the Step 23 commit.
+- Run final Step 24 diff and test checks.
+- Commit Step 24 changes.
+- Push Step 24 to GitHub.
+- Verify GitHub Actions for the Step 24 commit.
 - Confirm the local working tree is synchronized with `main`.
-- Select Step 24 only after repository and CI verification.
+- Select Step 25 only after repository and CI verification.
 
 ### Planned Features
 
@@ -653,13 +715,13 @@ tests/test_shop.py
 
 ## 14. Next Recommended Step
 
-Before starting Step 24:
+Before starting Step 25:
 
-1. Commit and push Step 23.
-2. Verify GitHub Actions for the Step 23 commit.
+1. Commit and push Step 24.
+2. Verify GitHub Actions for the Step 24 commit.
 3. Verify the remote repository matches the local milestone.
 4. Review the current order/payment/inventory architecture.
-5. Select the next feature based on the actual repository state.
+5. Select Step 25 based on the actual repository state.
 
 Do not start the next feature blindly.
 
@@ -673,7 +735,7 @@ Do not start the next feature blindly.
 4. Use one recommended solution instead of unnecessary alternatives.
 5. Add useful comments to new or modified code.
 6. Commit and push after every completed step.
-7. Keep `PROJECT_STATE.md` synchronized with the real project state.
+7. Keep `PROJECT_STATE.md` synchronized with the real repository state.
 8. Inspect existing code before modifying it.
 9. Do not remove data or functionality without verifying its purpose and impact.
 10. Review Git changes before committing.
@@ -682,4 +744,3 @@ Do not start the next feature blindly.
 13. Verify inventory and order-state transitions with automated tests.
 14. Keep documentation chronological and consistent with the repository.
 15. Verify CI after each completed development step.
-
