@@ -18,8 +18,7 @@ The project focuses on:
 - Search and pagination
 - Shopping cart and checkout
 - Inventory and stock management
-- Atomic stock reservation
-- Order cancellation and stock restoration
+- Atomic stock reservation during checkout
 - Payment workflow simulation
 - Redis caching
 - Rate limiting
@@ -64,12 +63,18 @@ Client / Frontend
        |        +---- Category Filtering
        |        +---- Redis Cache
        |        +---- Inventory / Stock
-       +---- Shopping Cart
-       |        +---- Stock Validation
+       |
+       +---- Cart
+       |        +---- User-specific cart
+       |        +---- Stock validation
+       |
        +---- Orders / Checkout
+       |        +---- Cancellation
+       |        +---- Order Lifecycle
+       |        +---- Admin Status Management
        |        +---- Atomic Stock Reservation
-       |        +---- Order Cancellation
        |        +---- Stock Restoration
+       |
        +---- Mock Payment
        +---- Rate Limiting
        +---- Background Tasks
@@ -104,9 +109,13 @@ Docker Compose
      └── Celery Worker
 ```
 
-All services communicate through the internal `backend_network`.
+All services communicate through the internal:
 
-PostgreSQL is not exposed directly to the host.
+```text
+backend_network
+```
+
+PostgreSQL is not exposed directly to the host. Redis is used internally by the application and Celery stack.
 
 ## Current Features
 
@@ -132,29 +141,25 @@ Admin-only routes use:
 get_current_admin_user
 ```
 
-Regular users receive HTTP 403 on admin-only endpoints, while superusers are allowed to access them.
+Regular users receive HTTP 403 when accessing admin-only endpoints, while superusers are allowed to access them.
 
 ### Product Catalog
 
-Products support:
-
-- Category association
-- Search
-- Pagination
-- Category filtering
-- Redis caching
-- Inventory tracking through `stock_quantity`
-
-Main endpoints:
+Categories:
 
 ```text
 GET  /categories/
 POST /categories/    # Admin
+```
+
+Products:
+
+```text
 GET  /products/
 POST /products/      # Admin
 ```
 
-Current product fields:
+Product fields currently include:
 
 ```text
 id
@@ -166,28 +171,39 @@ is_active
 category_id
 ```
 
+The product listing supports:
+
+- `skip` / `limit` pagination
+- `search` filtering by product title
+- Case-insensitive title search using SQLAlchemy `ilike`
+- `category_id` filtering
+- Redis caching based on list-query parameters
+- Cache invalidation after product creation
+
 ### Inventory Management
 
 Inventory is tracked with:
 
 ```text
-stock_quantity
+Product.stock_quantity
 ```
 
-The current rules are:
+Current inventory rules:
 
-- Products cannot be added to the cart beyond available stock.
-- Increasing an existing cart item is also checked against current stock.
-- Checkout re-checks stock before creating the order.
+- Users cannot add more units to their cart than the available stock.
+- Increasing an existing cart quantity is validated against current stock.
+- Checkout performs a final stock validation.
 - Checkout locks product rows using SQLAlchemy `with_for_update()`.
-- Stock is decremented inside the same transaction as order creation.
-- Insufficient stock causes checkout to fail and the transaction to roll back.
+- Stock is decremented inside the same database transaction as order creation.
+- Insufficient stock causes checkout to fail with HTTP 400 and roll back the transaction.
+- Pending-order cancellation restores the reserved quantity to product stock.
+- Stock restoration uses row-level locking as well.
 
 ### Shopping Cart
 
 - User-specific cart
 - Add / increment product quantity
-- Stock validation
+- Stock validation during add/increment
 - Retrieve current cart
 - Remove cart items
 - JWT-protected cart operations
@@ -202,67 +218,76 @@ DELETE /cart/{item_id}
 
 ### Orders / Checkout
 
-- Checkout from current cart
+- Checkout from the current user's cart
 - Order and order-item creation
 - Total calculation
-- Product price locking
-- Atomic stock reservation
+- Product price locked into order items
+- Atomic stock decrement
+- Row-level locking during checkout
+- Cart cleared after successful checkout
 - Order history
-- Order cancellation for pending orders
-- Stock restoration after cancellation
 
 Main endpoints:
 
 ```text
 POST /orders/checkout
 GET  /orders/
-POST /orders/{order_id}/cancel
 ```
 
-### Order Cancellation — Step 23
+### Order Lifecycle & Admin Management
 
-Step 23 adds:
+The controlled order lifecycle is:
+
+```text
+pending → paid → processing → shipped → delivered
+   │
+   └────────────→ cancelled
+```
+
+Valid transitions are centralized in `ALLOWED_STATUS_TRANSITIONS`.
+
+Valid transitions:
+
+- `pending → paid`
+- `pending → cancelled`
+- `paid → processing`
+- `processing → shipped`
+- `shipped → delivered`
+
+`delivered` and `cancelled` are terminal states.
+
+Admin status endpoint:
+
+```text
+PATCH /orders/{order_id}/status
+```
+
+The endpoint:
+
+- Requires `get_current_admin_user`
+- Validates the requested transition
+- Returns HTTP 400 for invalid transitions
+- Returns HTTP 403 for regular users
+- Returns HTTP 404 for unknown orders
+
+### Order Cancellation & Stock Restoration
+
+Pending orders can be cancelled using:
 
 ```text
 POST /orders/{order_id}/cancel
 ```
 
-Cancellation behavior:
+Cancellation:
 
-- The order must belong to the current authenticated user.
-- Only `pending` orders can be cancelled.
-- `paid` orders are rejected because real payment/refund handling is not implemented yet.
-- Already-cancelled orders are rejected.
-- Each product row is locked with `with_for_update()` before stock restoration.
-- `OrderItem.quantity` is added back to `Product.stock_quantity`.
-- The order status changes from `pending` to `cancelled`.
-- Stock restoration and status update are committed as one transaction.
+- Verifies order ownership
+- Allows cancellation only for `pending` orders
+- Locks the related product rows
+- Restores `OrderItem.quantity` to `Product.stock_quantity`
+- Changes status from `pending` to `cancelled`
+- Commits stock restoration and status change transactionally
 
-Example state transition:
-
-```text
-pending
-   |
-   | cancel
-   v
-cancelled
-```
-
-Stock flow:
-
-```text
-Checkout
-   ↓
-stock_quantity decreases
-   ↓
-Order = pending
-   ↓
-Cancel order
-   ↓
-stock_quantity restored
-   ↓
-Order = cancelled
-```
+Paid orders are not cancellable because the current payment implementation does not provide a real refund workflow.
 
 ### Mock Payment
 
@@ -282,15 +307,13 @@ POST /payment/process
 
 Redis is used for product catalog caching.
 
-Cache keys include pagination, search, and category-filter parameters.
+Cache keys include the relevant product-list parameters so different combinations of pagination, search, and category filtering do not incorrectly share cached responses.
 
 Product creation invalidates the relevant catalog cache.
 
-Redis is also used for rate limiting and Celery.
-
 ### Rate Limiting
 
-SlowAPI uses Redis for rate-limit storage.
+SlowAPI is integrated with Redis for rate-limit storage.
 
 The login endpoint currently uses:
 
@@ -298,31 +321,29 @@ The login endpoint currently uses:
 5 requests / minute
 ```
 
+This protects the login endpoint against repeated brute-force attempts.
+
 ### Celery Background Tasks
 
-Celery uses Redis as broker and result backend.
+Celery is integrated with Redis as both broker and result backend.
 
-Current infrastructure:
+Current infrastructure includes:
 
-```text
-app/core/celery_app.py
-app/tasks/email_tasks.py
-celery_worker
-```
+- `app/core/celery_app.py`
+- `app/tasks/email_tasks.py`
+- Dedicated `celery_worker` Docker Compose service
+- JSON task serialization
+- UTC configuration
+- `send_welcome_email_task`
+- Successful user registration queues the task asynchronously
 
-Current task:
-
-```text
-send_welcome_email_task
-```
-
-The welcome-email task is still a simulation and does not send real email.
+The current welcome-email task intentionally simulates a slow email operation and logs a successful result. It does **not** send a real email yet.
 
 ## Database
 
 PostgreSQL is the primary relational database.
 
-Current tables:
+Current database tables:
 
 ```text
 users
@@ -334,17 +355,19 @@ order_items
 alembic_version
 ```
 
-Alembic is the application's schema-management system.
+SQLAlchemy is used as the ORM.
 
-The inventory migration is:
+Alembic is used for database schema migrations.
 
-```text
-3105be9533db_add_product_stock_quantity.py
-```
+Direct `create_all` schema management is no longer the application's migration strategy; schema changes are managed through Alembic migrations.
 
-Step 23 does not require a new database migration because it uses the existing order, order-item, and product columns.
+The inventory migration adds `products.stock_quantity`.
+
+No new database migration was required for Step 23 or Step 24 because cancellation and lifecycle management use the existing order and product tables.
 
 ## API
+
+Main endpoints currently include:
 
 ```text
 GET    /
@@ -367,6 +390,7 @@ DELETE /cart/{item_id}
 POST   /orders/checkout
 GET    /orders/
 POST   /orders/{order_id}/cancel
+PATCH  /orders/{order_id}/status
 
 POST   /payment/process
 ```
@@ -383,41 +407,42 @@ After starting the application:
 http://127.0.0.1:8000/docs
 ```
 
-Swagger is the primary manual API verification tool used during development.
+Swagger is the primary tool used for manual API verification during development.
 
 ## Running the Project
 
-### Activate the virtual environment
+### 1. Activate the virtual environment
 
 ```bash
 source venv/bin/activate
 ```
 
-### Start Docker Compose
+### 2. Start Docker Compose
 
 ```bash
 docker compose up -d
 ```
 
-### Check containers
+This starts:
+
+- FastAPI
+- PostgreSQL
+- Redis
+- Celery Worker
+
+### 3. Check containers
 
 ```bash
 docker compose ps
 ```
 
-### Run migrations
+### 4. Open Swagger
 
-```bash
-docker compose exec web alembic upgrade head
+```text
+http://127.0.0.1:8000/docs
 ```
 
-### Run tests
-
-```bash
-docker compose exec web pytest
-```
-
-### View Celery worker logs
+### 5. Check Celery worker logs
 
 ```bash
 docker compose logs -f celery_worker
@@ -425,13 +450,13 @@ docker compose logs -f celery_worker
 
 ## Database Migrations
 
-Check current revision:
+Check the current Alembic revision:
 
 ```bash
 alembic current
 ```
 
-Check heads:
+Check available migration heads:
 
 ```bash
 alembic heads
@@ -443,7 +468,7 @@ Apply migrations:
 alembic upgrade head
 ```
 
-Create a migration after model changes:
+Create a migration after changing SQLAlchemy models:
 
 ```bash
 alembic revision --autogenerate -m "describe change"
@@ -453,9 +478,9 @@ Always review generated migrations before applying them.
 
 ## Testing
 
-The project uses Pytest and HTTPX.
+The project uses Pytest and HTTPX for automated API testing.
 
-Test coverage includes:
+The test suite covers:
 
 - Authentication
 - Registration
@@ -469,65 +494,45 @@ Test coverage includes:
 - Checkout
 - Order cancellation
 - Stock restoration
-- Invalid order-state cancellation
-- Order ownership checks
+- Order lifecycle transitions
+- Invalid status transitions
+- Admin RBAC for status updates
 - Payment
 - End-to-end shopping flow
 - Welcome-email task dispatch
 
-Run the full suite:
+Run the test suite inside the Docker application container:
 
 ```bash
-docker compose exec web pytest -q
+docker compose exec web pytest
 ```
 
-Latest verified full-project result for Step 23:
+The latest local verification for Step 24 is:
 
 ```text
-14 passed
+18 passed
 ```
 
-Relevant cancellation tests verify:
-
-```text
-Pending order cancellation        ✅
-Stock restoration                 ✅
-Order status → cancelled          ✅
-Repeated cancellation rejected    ✅
-Paid order cancellation rejected  ✅
-Other-user order rejected         ✅
-```
+A development step is not considered complete until its relevant tests succeed.
 
 ## CI/CD
 
-Workflow:
+GitHub Actions workflow:
 
 ```text
 .github/workflows/ci.yml
 ```
 
-The workflow:
-
-1. Checks out the repository.
-2. Creates `.env` from GitHub Secrets.
-3. Builds and starts Docker Compose.
-4. Waits for PostgreSQL.
-5. Runs `alembic upgrade head`.
-6. Runs Pytest.
-
-Triggers:
-
-```text
-push → main
-pull_request → main
-```
+The workflow builds the Docker environment, waits for PostgreSQL, applies `alembic upgrade head`, and runs the Pytest suite on push / pull-request activity targeting `main`.
 
 ## Development Workflow
+
+Every development step follows:
 
 ```text
 Inspect
    ↓
-Explain
+Explain the reason
    ↓
 Implement
    ↓
@@ -535,18 +540,32 @@ Test
    ↓
 Update documentation
    ↓
-Review Git diff
+Review Git changes
    ↓
 Commit
    ↓
 Push
    ↓
-Verify CI
-   ↓
 Next step
 ```
 
-A step is not complete until implementation, tests, documentation, Git review, commit, push, and CI verification are complete.
+A step is not complete until its test succeeds and the repository state has been reviewed.
+
+## Project Development Rules
+
+1. Do not move to the next step before the current step is tested.
+2. Documentation must be updated during development.
+3. Use one recommended solution instead of presenting unnecessary alternatives.
+4. Add useful comments to new or modified code.
+5. Commit and push after every completed step.
+6. Keep `PROJECT_STATE.md` synchronized with the real project state.
+7. Explain the reason for installations, files, tools, configuration changes, and code changes.
+8. Inspect existing code before modifying it.
+9. Do not remove existing functionality or data without checking its purpose and impact.
+10. Keep project state documented so development can continue in a new chat.
+11. Review `git diff --check` and `git status` before committing.
+12. Verify relevant tests before marking a development step complete.
+13. Update both `README.md` and `PROJECT_STATE.md` when a development step changes the architecture or implemented features.
 
 ## Current Development Progress
 
@@ -574,44 +593,47 @@ Step 20 — Celery Background Worker              ✅
 Step 21 — Alembic Schema Reconciliation         ✅
 Step 22 — Inventory & Atomic Stock Reservation  ✅
 Step 23 — Order Cancellation & Stock Restoration ✅
+Step 24 — Order Lifecycle & Admin Management    🟡
 ```
 
 ## Project Status
 
-The latest development step is:
+The current development step is:
 
 ```text
-Step 23 — Order Cancellation and Stock Restoration
+Step 24 — Order Lifecycle and Admin Order Management
 ```
 
-The system can now restore reserved inventory when a pending order is cancelled.
+Step 24 has been implemented and verified locally, but the code changes are still pending commit and push.
 
-The current order lifecycle is:
+The system now has a controlled order lifecycle, admin-only status management, validated status transitions, order cancellation, and inventory restoration.
+
+The current test suite passes with:
 
 ```text
-Cart
-  ↓
-Checkout
-  ↓
-Pending Order + Reserved Stock
-  ↓
- ┌───────────────┐
- │               │
- v               v
-Payment       Cancellation
- ↓               ↓
-Paid        Stock Restored
-                 ↓
-              Cancelled
+18 passed
 ```
 
-The current project test suite passes with:
+The real payment/refund workflow is still not implemented. Paid orders therefore remain non-cancellable until refund handling exists.
+
+## Order Lifecycle and Admin Management
+
+Current lifecycle:
 
 ```text
-14 passed
+pending → paid → processing → shipped → delivered
+   │
+   └────────────→ cancelled
 ```
 
-The real payment/refund workflow is still not implemented.
+Admin-only status updates are handled by `PATCH /orders/{order_id}/status`. The transition rules are centralized in `ALLOWED_STATUS_TRANSITIONS`.
+
+Implemented Step 24 protections:
+
+- Invalid transitions return HTTP 400.
+- Regular users cannot change order status.
+- Unknown orders return HTTP 404.
+- `delivered` and `cancelled` are terminal states.
 
 ## Future Roadmap
 
@@ -638,11 +660,10 @@ Planned areas include:
 
 ## Documentation
 
-Primary project-state document:
+The primary project-state document is:
 
 ```text
 PROJECT_STATE.md
 ```
 
-It contains the architecture, completed steps, known-good state, lessons learned, repository status, pending work, future enhancements, and development rules required to continue the project in a future session.
-
+It contains the architecture, completed steps, current known-good state, lessons learned, repository status, pending work, future enhancements, and development rules required to continue the project in a future session.
