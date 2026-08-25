@@ -1,3 +1,8 @@
+from app.core.database import SessionLocal
+from app.modules.shipping.models import Shipping
+from app.modules.order.models import Order
+from app.modules.product.models import Product
+
 def test_products_list(client):
     """تست دریافت لیست محصولات"""
     response = client.get("/products/")
@@ -504,3 +509,367 @@ def test_update_unknown_order_status_returns_404(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Order not found"
+def test_checkout_creates_shipping(client, auth_token):
+    """Checkout باید رکورد Shipping را همراه سفارش ایجاد کند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_data = checkout_res.json()
+
+    assert order_data["status"] == "pending"
+    assert order_data["shipping"] is not None
+
+    shipping = order_data["shipping"]
+
+    assert shipping["order_id"] == order_data["id"]
+    assert shipping["address"] == "123 Main Street"
+    assert shipping["city"] == "Tehran"
+    assert shipping["postal_code"] == "1234567890"
+    assert shipping["carrier"] is None
+    assert shipping["tracking_number"] is None
+    assert shipping["shipped_at"] is None
+    assert shipping["delivered_at"] is None
+def test_failed_checkout_does_not_create_shipping(client, auth_token):
+    """Checkout ناموفق نباید Shipping یا Order جدید ایجاد کند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    product_id = product["id"]
+    initial_stock = product["stock_quantity"]
+
+    db = SessionLocal()
+    try:
+        product_db = db.query(Product).filter_by(id=product_id).first()
+
+        assert product_db is not None
+
+        product_db.stock_quantity = 0
+        db.commit()
+    finally:
+        db.close()
+    # ایجاد سبد با مقداری بیشتر از موجودی فعلی
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product_id,
+            "quantity": initial_stock + 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    # Cart خودش باید این درخواست را رد کند.
+    assert cart_res.status_code == 400
+    assert cart_res.json()["detail"] == "Insufficient stock"
+
+    # برای تست rollback، مقدار 1 را در سبد قرار می‌دهیم و
+    # سپس قبل از checkout موجودی را به صفر می‌رسانیم.
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product_id,
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    db = SessionLocal()
+    try:
+        product_db = db.query(
+            __import__(
+                "app.modules.product.models",
+                fromlist=["Product"]
+            ).Product
+        ).filter_by(id=product_id).first()
+
+        assert product_db is not None
+
+        product_db.stock_quantity = 0
+        db.commit()
+    finally:
+        db.close()
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 400
+
+    db = SessionLocal()
+    try:
+        final_order_count = db.query(Order).count()
+        final_shipping_count = db.query(Shipping).count()
+    finally:
+        db.close()
+
+    assert final_order_count == initial_order_count
+    assert final_shipping_count == initial_shipping_count
+
+    db = SessionLocal()
+    try:
+        product_db = db.query(Product).filter_by(id=product_id).first()
+
+        assert product_db is not None
+
+        product_db.stock_quantity = initial_stock
+        db.commit()
+    finally:
+        db.close()
+
+def test_admin_can_update_shipping(client, auth_token, admin_token):
+    """ادمین باید بتواند carrier و tracking number را تغییر دهد."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    response = client.patch(
+        f"/shipping/{order_id}",
+        json={
+            "carrier": "DHL",
+            "tracking_number": "DHL-123456789"
+        },
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+
+    assert response.status_code == 200
+
+    shipping = response.json()
+
+    assert shipping["order_id"] == order_id
+    assert shipping["carrier"] == "DHL"
+    assert shipping["tracking_number"] == "DHL-123456789"
+
+
+def test_regular_user_cannot_update_shipping(
+    client,
+    auth_token
+):
+    """کاربر عادی نباید بتواند اطلاعات حمل را تغییر دهد."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    response = client.patch(
+        f"/shipping/{order_id}",
+        json={
+            "carrier": "DHL",
+            "tracking_number": "DHL-123456789"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_unknown_shipping_order_returns_404(client, admin_token):
+    """برای سفارشی که Shipping ندارد باید 404 برگردد."""
+
+    response = client.patch(
+        "/shipping/999999",
+        json={
+            "carrier": "DHL",
+            "tracking_number": "DHL-000000000"
+        },
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Shipping record not found"
+
+
+def test_shipping_timestamps_follow_order_lifecycle(
+    client,
+    auth_token,
+    admin_token
+):
+    """تغییر lifecycle باید shipped_at و delivered_at را ثبت کند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    for new_status in ["paid", "processing", "shipped"]:
+        response = client.patch(
+            f"/orders/{order_id}/status",
+            params={"new_status": new_status},
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+
+        assert response.status_code == 200
+
+    shipping = client.patch(
+        f"/shipping/{order_id}",
+        json={
+            "carrier": "DHL",
+            "tracking_number": "DHL-123456789"
+        },
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+
+    assert shipping.status_code == 200
+    shipping_data = shipping.json()
+
+    assert shipping_data["shipped_at"] is not None
+    assert shipping_data["delivered_at"] is None
+
+    response = client.patch(
+        f"/orders/{order_id}/status",
+        params={"new_status": "delivered"},
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+
+    assert response.status_code == 200
+
+    shipping = client.patch(
+        f"/shipping/{order_id}",
+        json={},
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+
+    assert shipping.status_code == 200
+
+    shipping_data = shipping.json()
+
+    assert shipping_data["shipped_at"] is not None
+    assert shipping_data["delivered_at"] is not None

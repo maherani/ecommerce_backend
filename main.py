@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.core.rate_limit import limiter
+from app.modules.shipping.router import router as shipping_router
 # ۲. سپس دستور ساخت جداول اجرا شود
 #Base.metadata.create_all(bind=engine)
 
@@ -51,6 +52,7 @@ app.include_router(order_router)
 app.include_router(payment_router)  # اضافه شد
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.include_router(shipping_router)
 # یک مسیر ساده برای تست سلامت سرور (Health Check)
 @app.get("/")
 def health_check():

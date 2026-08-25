@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,6 +10,7 @@ from app.modules.cart.models import CartItem
 from app.modules.user.models import User
 from app.modules.user.router import get_current_user, get_current_admin_user
 from app.modules.product.models import Product
+from app.modules.shipping import models as shipping_models
 
 # Allowed order status transitions.
 ALLOWED_STATUS_TRANSITIONS = {
@@ -23,6 +26,7 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.post("/checkout", response_model=schemas.OrderResponse, status_code=status.HTTP_201_CREATED)
 def checkout(
+    checkout_data: schemas.CheckoutRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -78,6 +82,13 @@ def checkout(
     )
     db.add(new_order)
 
+    shipping = shipping_models.Shipping(
+        order=new_order,
+        address=checkout_data.address,
+        city=checkout_data.city,
+        postal_code=checkout_data.postal_code
+    )
+    db.add(shipping)
     # ۴. پاک‌سازی سبد خرید کاربر
     db.query(CartItem).filter(
         CartItem.user_id == current_user.id
@@ -128,7 +139,17 @@ def update_order_status(
         )
 
     order.status = new_status
+    shipping = db.query(shipping_models.Shipping).filter(
+        shipping_models.Shipping.order_id == order.id
+    ).first()
 
+    if new_status == "shipped":
+       if shipping:
+        shipping.shipped_at = datetime.now(timezone.utc)
+
+    elif new_status == "delivered":
+       if shipping:
+           shipping.delivered_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(order)
 

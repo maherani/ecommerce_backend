@@ -11,6 +11,7 @@ from app.modules.user import models  # noqa: F401
 from app.modules.product import models
 from app.modules.cart import models
 from app.modules.order import models
+from app.modules.shipping import models
 
 # Alembic Config object.
 config = context.config
