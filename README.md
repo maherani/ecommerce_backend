@@ -106,7 +106,7 @@ shipped_at
 delivered_at
 ```
 
-Checkout now accepts shipping address data and creates the Order and Shipping records in the same transaction.
+Checkout accepts shipping address data and creates the Order and Shipping records in the same transaction.
 
 Admin endpoint:
 
@@ -114,9 +114,9 @@ Admin endpoint:
 PATCH /shipping/{order_id}
 ```
 
-This endpoint allows an authenticated admin to update `carrier` and `tracking_number`.
+The endpoint allows an authenticated admin to update `carrier` and `tracking_number`.
 
-Order lifecycle integration automatically records timestamps:
+Order lifecycle integration records shipping timestamps:
 
 ```text
 processing → shipped
@@ -128,23 +128,58 @@ shipped → delivered
 shipping.delivered_at = now()
 ```
 
-A dedicated Alembic migration creates the `shipping` table:
+Alembic migration:
 
 ```text
 40f98fd888bb_add_shipping_table.py
 ```
 
-The Order and Shipping SQLAlchemy models use a one-to-one relationship.
+### Payment — Step 30
 
-### Mock Payment
+Step 30 promotes payment from a transient mock operation to a **persistent Payment domain entity** stored in PostgreSQL.
 
-- `POST /payment/process`
-- Pending-order validation
-- Payment changes order status to `paid`
-- Transaction ID generation
-- Duplicate-payment protection
+Implemented payment fields:
 
-The payment implementation is still a mock and does not provide a real gateway or refund workflow.
+```text
+id
+order_id
+amount
+status
+transaction_id
+created_at
+paid_at
+refunded_at
+```
+
+The Payment entity has a one-to-one relationship with Order:
+
+```text
+Order 1 ───── 1 Payment
+```
+
+Payment processing:
+
+```text
+POST /payment/process
+```
+
+The endpoint:
+
+- Verifies that the order belongs to the authenticated user.
+- Allows payment only for `pending` orders.
+- Prevents a second payment for the same order.
+- Generates a unique mock transaction ID.
+- Persists the payment record in PostgreSQL.
+- Records the paid timestamp.
+- Changes the order status to `paid`.
+
+Alembic migration:
+
+```text
+cff58edd10a9_add_payments_table.py
+```
+
+The payment implementation remains a mock gateway. Real payment-provider integration and a production refund workflow are future work.
 
 ## Testing
 
@@ -164,6 +199,9 @@ Coverage includes:
 - Regular-user shipping RBAC
 - Shipping lifecycle timestamps
 - Unknown-shipping handling
+- Persistent payment creation
+- Duplicate payment protection
+- Payment ownership protection
 - End-to-end shopping flow
 
 Run the full suite:
@@ -175,7 +213,7 @@ docker compose exec web pytest -q
 Latest verified full-project result:
 
 ```text
-24 passed
+30 passed
 ```
 
 ## CI/CD
@@ -232,6 +270,7 @@ Step 22 — Inventory & Atomic Stock Reservation  ✅
 Step 23 — Order Cancellation & Stock Restoration ✅
 Step 24 — Order Lifecycle & Admin Order Management ✅
 Step 25 — Shipping & Delivery Management        ✅
+Step 30 — Persistent Payment Records            ✅
 ```
 
 ## Order Lifecycle
@@ -264,9 +303,23 @@ shipped + shipped_at
 delivered + delivered_at
 ```
 
+## Payment Lifecycle
+
+```text
+pending order
+     ↓
+POST /payment/process
+     ↓
+Payment persisted
+     ↓
+order = paid
+     ↓
+transaction_id + paid_at recorded
+```
+
 ## Database
 
-Current known application tables include:
+Current application tables include:
 
 ```text
 users
@@ -276,10 +329,19 @@ cart_items
 orders
 order_items
 shipping
+payments
 alembic_version
 ```
 
 Alembic is the authoritative database schema-management mechanism. Review generated migrations before applying them.
+
+Payment migration chain:
+
+```text
+40f98fd888bb_add_shipping_table.py
+                ↓
+cff58edd10a9_add_payments_table.py
+```
 
 ## Development Workflow
 
@@ -307,15 +369,13 @@ Next step
 
 ## Project Status
 
-The latest completed milestone is:
+Latest completed milestone:
 
 ```text
-Step 25 — Shipping and Delivery Management
+Step 30 — Persistent Payment Records
 ```
 
-Step 25 is implemented, tested, committed, pushed, and verified with green GitHub Actions.
-
-The current system now combines inventory reservation, order cancellation, a controlled order lifecycle, and first-class shipping/delivery management.
+The system now combines inventory reservation, order cancellation, controlled order lifecycle management, first-class shipping/delivery management, and persistent payment records.
 
 ## Future Roadmap
 
@@ -348,4 +408,10 @@ Primary project-state document:
 PROJECT_STATE.md
 ```
 
-It contains the architecture, completed steps, known-good state, lessons learned, repository status, pending work, future enhancements, and development rules required to continue the project in a future session.
+Architecture document:
+
+```text
+docs/ARCHITECTURE.md
+```
+
+These documents describe the architecture, completed steps, known-good state, lessons learned, pending work, future enhancements, and development rules required to continue the project in a future session.
