@@ -14,6 +14,13 @@ class Order(Base):
 
     user = relationship("User")
     # رابطه با آیتم‌های سفارش
+    shipping = relationship(
+        "Shipping",
+        back_populates="order",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 class OrderItem(Base):

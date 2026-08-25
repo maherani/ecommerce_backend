@@ -26,4 +26,4 @@ class Shipping(Base):
     shipped_at = Column(DateTime, nullable=True)
     delivered_at = Column(DateTime, nullable=True)
 
-    order = relationship("Order")
+    order = relationship("Order", back_populates="shipping")
