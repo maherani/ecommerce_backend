@@ -546,9 +546,9 @@ Current local development milestone:
 Step 23 — Order Cancellation and Stock Restoration
 ```
 
-Step 23 code changes are currently in the local working tree and have not yet been committed or pushed.
+Step 23 has been committed and pushed to GitHub.
 
-Current Step 23 modified files:
+Current Step 23 modified files were:
 
 ```text
 app/modules/order/router.py
@@ -603,13 +603,9 @@ tests/test_shop.py
 
 ### Immediate
 
-- Update `PROJECT_STATE.md` and `README.md` in the local Step 23 working tree.
-- Run `git diff --check`.
-- Run the full Pytest suite.
-- Review Step 23 changes.
-- Commit Step 23.
-- Push Step 23 to GitHub.
-- Verify the GitHub Actions result for the new commit.
+- Verify the GitHub Actions result for the Step 23 commit.
+- Confirm the local working tree is synchronized with `main`.
+- Select Step 24 only after repository and CI verification.
 
 ### Planned Features
 
