@@ -6,8 +6,18 @@ from app.core.database import get_db
 from app.modules.order import models, schemas
 from app.modules.cart.models import CartItem
 from app.modules.user.models import User
-from app.modules.user.router import get_current_user
+from app.modules.user.router import get_current_user, get_current_admin_user
 from app.modules.product.models import Product
+
+# Allowed order status transitions.
+ALLOWED_STATUS_TRANSITIONS = {
+    "pending": {"paid", "cancelled"},
+    "paid": {"processing"},
+    "processing": {"shipped"},
+    "shipped": {"delivered"},
+    "delivered": set(),
+    "cancelled": set(),
+}
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -87,6 +97,42 @@ def get_my_orders(
     return db.query(models.Order).filter(models.Order.user_id == current_user.id).all()
 
 
+@router.patch("/{order_id}/status", response_model=schemas.OrderResponse)
+def update_order_status(
+    order_id: int,
+    new_status: str,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_current_admin_user)
+):
+    """تغییر وضعیت سفارش توسط مدیر"""
+
+    order = db.query(models.Order).filter(
+        models.Order.id == order_id
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    allowed_statuses = ALLOWED_STATUS_TRANSITIONS.get(order.status, set())
+
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid status transition: "
+                f"{order.status} -> {new_status}"
+            )
+        )
+
+    order.status = new_status
+
+    db.commit()
+    db.refresh(order)
+
+    return order
 
 @router.post("/{order_id}/cancel", response_model=schemas.OrderResponse)
 def cancel_order(

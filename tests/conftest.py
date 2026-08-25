@@ -42,3 +42,48 @@ def auth_token(client, test_user):
         data={"username": test_user["email"], "password": test_user["password"]}
     )
     return response.json()["access_token"]
+
+@pytest.fixture
+def admin_user(client):
+    email = f"admin_{uuid.uuid4().hex[:6]}@example.com"
+    password = "password123"
+
+    response = client.post(
+        "/users/",
+        json={
+            "email": email,
+            "password": password
+        }
+    )
+
+    assert response.status_code == 201
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        assert user is not None
+
+        user.is_superuser = True
+        db.commit()
+    finally:
+        db.close()
+
+    return {
+        "email": email,
+        "password": password
+    }
+
+
+@pytest.fixture
+def admin_token(client, admin_user):
+    response = client.post(
+        "/users/login",
+        data={
+            "username": admin_user["email"],
+            "password": admin_user["password"]
+        }
+    )
+
+    assert response.status_code == 200
+
+    return response.json()["access_token"]
