@@ -35,12 +35,14 @@ The project is developed incrementally. Every completed step must be tested, doc
 - Step 21 — Alembic schema reconciliation and migration-aware CI
 - Step 22 — Inventory management and atomic stock reservation
 - Step 23 — Order cancellation and stock restoration
+- Step 24 — Order lifecycle and admin order management
+- Step 25 — Shipping and delivery management
 
 ### Current Step
 
-Step 24 is the current development step and has been implemented and verified locally, but has not yet been committed or pushed.
+Step 25 is the latest completed and verified development step.
 
-Order lifecycle management is now centralized with explicit status-transition rules. Admin users can update order status through a protected endpoint, while invalid transitions and non-admin access are rejected.
+Order lifecycle management is centralized with explicit status-transition rules. Admin users can update order status through a protected endpoint, while invalid transitions and non-admin access are rejected. Shipping and delivery management are now attached to each order and integrated with checkout and lifecycle transitions.
 
 The valid lifecycle is:
 
@@ -55,7 +57,7 @@ Order cancellation remains limited to `pending` orders and restores reserved sto
 Latest verified full test result:
 
 ```text
-18 passed
+24 passed
 ```
 
 ---
@@ -96,11 +98,18 @@ Client / Frontend
        |       +---- Cancellation
        |       +---- Lifecycle management
        |       +---- Admin status management
+       |       +---- Shipping integration
        |       +---- Order items
        |       +---- Price locking
        |       +---- Atomic stock reservation
        |       +---- Stock restoration on cancellation
        |       +---- Order history
+       |
+       +---- Shipping Module
+       |       +---- Shipping address
+       |       +---- Carrier / tracking number
+       |       +---- shipped_at / delivered_at
+       |       +---- Admin shipping management
        |
        +---- Payment Module
        |       +---- Mock payment processing
@@ -289,6 +298,35 @@ Admin status endpoint:
 - Returns HTTP 404 for unknown orders
 - Returns HTTP 403 for regular users
 
+#### Shipping and Delivery Management
+
+Step 25 adds a dedicated `Shipping` entity with a one-to-one relationship to `Order`.
+
+Implemented features:
+
+- `Shipping` model and Alembic migration `40f98fd888bb`
+- Shipping address, city, and postal code captured during checkout
+- Shipping information included in `OrderResponse`
+- `PATCH /shipping/{order_id}` for admin carrier and tracking updates
+- Admin-only shipping updates
+- `shipped_at` recorded when an order transitions to `shipped`
+- `delivered_at` recorded when an order transitions to `delivered`
+- Transactional checkout creation of Order + Shipping
+- Rollback coverage ensuring failed checkout does not create an Order or Shipping record
+- Order/Shipping bidirectional one-to-one relationship
+
+Current shipping fields:
+
+```text
+address
+city
+postal_code
+carrier
+tracking_number
+shipped_at
+delivered_at
+```
+
 ### 5.7 Mock Payment
 
 - `POST /payment/process`
@@ -320,12 +358,18 @@ Pytest coverage includes:
 - Invalid order status transitions
 - Regular-user RBAC for order status updates
 - Unknown-order handling for admin status updates
+- Shipping creation during checkout
+- Shipping rollback on failed checkout
+- Admin shipping management
+- Regular-user shipping RBAC
+- Shipping lifecycle timestamps
+- Unknown-shipping handling
 - End-to-end shopping flow
 
 Latest full test result:
 
 ```text
-18 passed
+24 passed
 ```
 
 Verification command:
@@ -363,11 +407,12 @@ Migrations include:
 aee86fd59c30
 b8c2d1e4f6a7
 3105be9533db_add_product_stock_quantity.py
+40f98fd888bb_add_shipping_table.py
 ```
 
 The inventory migration adds `products.stock_quantity`.
 
-No separate schema migration is required for Step 23 or Step 24 because the order cancellation and lifecycle management features use the existing `orders`, `order_items`, and `products` tables.
+Step 25 adds the `shipping` table through Alembic migration `40f98fd888bb_add_shipping_table.py`.
 
 ### 5.11 Redis Caching
 
@@ -427,6 +472,7 @@ products
 cart_items
 orders
 order_items
+shipping
 alembic_version
 ```
 
@@ -532,7 +578,7 @@ Latest Step 23 verification:
 14 full-project tests passed
 ```
 
-Status: **Completed and verified locally**
+Status: **Completed and verified**
 
 ### Step 24 — Order Lifecycle and Admin Order Management
 
@@ -556,7 +602,32 @@ Latest Step 24 verification:
 18 passed
 ```
 
-Status: **Implemented and verified locally — pending commit/push**
+Status: **Completed and verified**
+
+### Step 25 — Shipping and Delivery Management
+
+Implemented:
+
+- Dedicated `Shipping` model
+- One-to-one `Order` ↔ `Shipping` relationship
+- Alembic migration `40f98fd888bb_add_shipping_table.py`
+- Shipping address captured during checkout
+- Shipping data exposed through `OrderResponse`
+- `PATCH /shipping/{order_id}` admin endpoint
+- Carrier and tracking-number management
+- `shipped_at` timestamp on `processing → shipped`
+- `delivered_at` timestamp on `shipped → delivered`
+- Transactional Shipping creation during checkout
+- Failed-checkout rollback coverage
+- Admin and regular-user shipping authorization tests
+
+Latest Step 25 verification:
+
+```text
+24 passed
+```
+
+Status: **Completed and verified**
 
 ---
 
@@ -575,6 +646,10 @@ Status: **Implemented and verified locally — pending commit/push**
 - Because real payment/refund integration is not implemented yet, paid orders are not cancellable.
 - Order status transitions should be centralized rather than duplicated across endpoints.
 - Admin-only lifecycle changes should use the existing RBAC dependency.
+- Shipping belongs to the order as a one-to-one domain object.
+- Checkout should create order and shipping information atomically.
+- Shipping timestamps should be tied to lifecycle transitions rather than manually inferred from API calls.
+- Shipping updates should remain admin-only.
 
 ---
 
@@ -595,29 +670,43 @@ main
 Latest completed remote development milestone:
 
 ```text
-Step 23 — Order Cancellation and Stock Restoration
+Step 25 — Shipping and Delivery Management
 ```
 
-Current local development milestone:
+Latest verified test result:
 
 ```text
-Step 24 — Order Lifecycle and Admin Order Management
+24 passed
 ```
 
-Step 24 code changes are currently in the local working tree and have not yet been committed or pushed.
+Step 25 is committed and pushed to GitHub. GitHub Actions is green for the Step 25 changes.
 
-Current Step 24 modified files:
+Recent Step 25 commits:
 
 ```text
+32b6f63540a96e83988f45357aefef42545fe4a5
+feat: add shipping and delivery management
+
+bb1b024d87e34aa953834240b709b97b565a00cb
+fix: link order and shipping models
+
+a84608d0df52c159ed2c07a69c4845928d5a9eeb
+fix: correct shipping rollback test
+```
+
+Current modified project areas introduced by Step 25:
+
+```text
+alembic/env.py
+alembic/versions/40f98fd888bb_add_shipping_table.py
+app/modules/order/models.py
 app/modules/order/router.py
-tests/conftest.py
+app/modules/order/schemas.py
+app/modules/shipping/models.py
+app/modules/shipping/router.py
+app/modules/shipping/schemas.py
+main.py
 tests/test_shop.py
-```
-
-Current verification:
-
-```text
-18 passed
 ```
 
 ---
@@ -645,6 +734,7 @@ app/modules/product/
 app/modules/cart/
 app/modules/order/
 app/modules/payment/
+app/modules/shipping/
 ```
 
 Important tests:
@@ -662,17 +752,13 @@ tests/test_shop.py
 
 ### Immediate
 
-- Run final Step 24 diff and test checks.
-- Commit Step 24 changes.
-- Push Step 24 to GitHub.
-- Verify GitHub Actions for the Step 24 commit.
-- Confirm the local working tree is synchronized with `main`.
-- Select Step 25 only after repository and CI verification.
+- Review the current payment flow before starting the next feature.
+- Decide whether Step 26 should introduce real payment/refund behavior or another high-value domain capability based on the repository state.
+- Keep `PROJECT_STATE.md` and `README.md` synchronized with GitHub after each completed step.
 
 ### Planned Features
 
 - Real payment gateway and refund integration
-- Shipping management
 - Administration expansion
 - Real email delivery integration
 - Structured logging
@@ -697,7 +783,6 @@ tests/test_shop.py
 - Real payment gateway integration
 - Real refund workflow
 - Real email provider integration
-- Shipping management
 - Inventory reservation expiration
 - Stock restoration after additional order states
 - Inventory audit history
@@ -715,13 +800,13 @@ tests/test_shop.py
 
 ## 14. Next Recommended Step
 
-Before starting Step 25:
+Before starting Step 26:
 
-1. Commit and push Step 24.
-2. Verify GitHub Actions for the Step 24 commit.
-3. Verify the remote repository matches the local milestone.
-4. Review the current order/payment/inventory architecture.
-5. Select Step 25 based on the actual repository state.
+1. Review the current payment implementation and its relationship to the order lifecycle and shipping flow.
+2. Select the next feature based on the actual repository state.
+3. Define tests before implementation.
+4. Update documentation as part of the step.
+5. Verify the full test suite and CI before closing the step.
 
 Do not start the next feature blindly.
 
@@ -735,7 +820,7 @@ Do not start the next feature blindly.
 4. Use one recommended solution instead of unnecessary alternatives.
 5. Add useful comments to new or modified code.
 6. Commit and push after every completed step.
-7. Keep `PROJECT_STATE.md` synchronized with the real repository state.
+7. Keep `PROJECT_STATE.md` synchronized with the real project state.
 8. Inspect existing code before modifying it.
 9. Do not remove data or functionality without verifying its purpose and impact.
 10. Review Git changes before committing.
