@@ -20,6 +20,12 @@ class Order(Base):
         uselist=False,
         cascade="all, delete-orphan"
     )
+    payment = relationship(
+        "Payment",
+         back_populates="order",
+         uselist=False,
+         cascade="all, delete-orphan"
+    )
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 

@@ -12,7 +12,7 @@ from app.modules.product import models
 from app.modules.cart import models
 from app.modules.order import models
 from app.modules.shipping import models
-
+from app.modules.payment import models
 # Alembic Config object.
 config = context.config
 
