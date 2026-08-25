@@ -509,6 +509,7 @@ def test_update_unknown_order_status_returns_404(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Order not found"
+
 def test_checkout_creates_shipping(client, auth_token):
     """Checkout باید رکورد Shipping را همراه سفارش ایجاد کند."""
 
@@ -560,6 +561,7 @@ def test_checkout_creates_shipping(client, auth_token):
     assert shipping["tracking_number"] is None
     assert shipping["shipped_at"] is None
     assert shipping["delivered_at"] is None
+
 def test_failed_checkout_does_not_create_shipping(client, auth_token):
     """Checkout ناموفق نباید Shipping یا Order جدید ایجاد کند."""
 
@@ -578,12 +580,8 @@ def test_failed_checkout_does_not_create_shipping(client, auth_token):
 
     db = SessionLocal()
     try:
-        product_db = db.query(Product).filter_by(id=product_id).first()
-
-        assert product_db is not None
-
-        product_db.stock_quantity = 0
-        db.commit()
+        initial_order_count = db.query(Order).count()
+        initial_shipping_count = db.query(Shipping).count()
     finally:
         db.close()
     # ایجاد سبد با مقداری بیشتر از موجودی فعلی
