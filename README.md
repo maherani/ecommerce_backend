@@ -79,55 +79,61 @@ payment_id
 event_type
 status
 created_at
+actor_user_id
+metadata
+event_id
 ```
 
-Current events:
+Current events include payment creation, refund, and webhook events. Duplicate idempotent payment requests and duplicate webhook deliveries do not create duplicate audit events.
+
+Migration:
 
 ```text
-payment_created
-payment_refunded
+e124ed32b079_add_payment_events_table.py
 ```
 
 ### Step 34 — Rich Payment Audit Metadata
 
-Step 34 enriches `PaymentEvent` records with the actor responsible for the event and structured event metadata.
+Payment events record the actor responsible for the event and structured JSON metadata. User-triggered payment/refund events store `actor_user_id`; webhook events can use a null actor.
 
-Additional fields:
+Metadata can include order ID, amount, transaction ID, refund timestamp, event ID, and event source.
 
-```text
-actor_user_id
-metadata (JSON)
-```
-
-`actor_user_id` references the authenticated user who triggered the event. Metadata records contextual information such as order ID, amount, transaction ID, and refund timestamp.
-
-Payment flow:
-
-```text
-Payment created
-     ↓
-PaymentEvent(
-  payment_created,
-  actor_user_id,
-  metadata
-)
-
-Payment refunded
-     ↓
-PaymentEvent(
-  payment_refunded,
-  actor_user_id,
-  metadata
-)
-```
-
-The migration is:
+Migration:
 
 ```text
 2a408bf8badb_add_payment_audit_metadata.py
 ```
 
-Migration and database constraints keep the audit actor linked to `users.id`.
+### Step 35 — Payment Webhooks
+
+A provider callback endpoint is available at:
+
+```text
+POST /payment/webhook
+```
+
+Webhook payload:
+
+```text
+transaction_id
+status
+event_id
+```
+
+Webhook security and behavior:
+
+- HMAC-SHA256 signature validation using `PAYMENT_WEBHOOK_SECRET`.
+- Unknown transactions return HTTP `404`.
+- Unsupported statuses return HTTP `400`.
+- Supported `paid` and `refunded` states update Payment and Order state.
+- Each processed webhook creates a `PaymentEvent` with `event_id` and source metadata.
+- Repeated delivery with the same `event_id` returns `Webhook already processed` and does not create another audit event.
+
+Migration:
+
+```text
+e3e6a6bd5e42_add_payment_webhook_event_id.py
+```
 
 ## Testing
 
@@ -140,10 +146,10 @@ docker compose exec web pytest -q
 Latest verified result:
 
 ```text
-37 passed
+41 passed
 ```
 
-Coverage includes payment persistence, duplicate-payment protection, refunds, refund authorization, idempotency replay handling, cross-order key protection, PaymentEvent persistence, duplicate-event protection, actor attribution, and structured audit metadata.
+Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, and duplicate webhook protection.
 
 ## Current Development Progress
 
@@ -169,7 +175,7 @@ Step 18 — Redis Product Caching                 ✅
 Step 19 — Redis Rate Limiting                   ✅
 Step 20 — Celery Background Worker              ✅
 Step 21 — Alembic Schema Reconciliation         ✅
-Step 22 — Inventory & Atomic Stock Reservation  ✅
+Step 22 — Atomic Stock Reservation              ✅
 Step 23 — Order Cancellation & Stock Restoration ✅
 Step 24 — Order Lifecycle & Admin Management    ✅
 Step 25 — Shipping & Delivery Management        ✅
@@ -178,6 +184,7 @@ Step 31 — Payment Refund Flow                   ✅
 Step 32 — Payment Idempotency                   ✅
 Step 33 — Payment Audit History                 ✅
 Step 34 — Rich Payment Audit Metadata           ✅
+Step 35 — Payment Webhooks                      ✅
 ```
 
 ## Database Migration Chain
@@ -192,6 +199,8 @@ aea3438feb25_add_payment_idempotency_key.py
 e124ed32b079_add_payment_events_table.py
                 ↓
 2a408bf8badb_add_payment_audit_metadata.py
+                ↓
+e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
 ## Development Workflow
@@ -205,16 +214,16 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest implemented milestone:
 
 ```text
-Step 34 — Rich Payment Audit Metadata
+Step 35 — Payment Webhooks
 ```
 
 Latest verified local test result:
 
 ```text
-37 passed
+41 passed
 ```
 
-Payment audit metadata is currently implemented at the domain/database level; real payment-provider integration remains future work.
+Payment webhooks are currently a domain/database simulation of a provider callback; real external payment gateway integration remains future work.
 
 ## Documentation
 
