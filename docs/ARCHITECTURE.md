@@ -2,7 +2,7 @@
 
 ## 1. System Overview
 
-The application is a Dockerized FastAPI e-commerce backend with PostgreSQL as the primary relational database and Redis as the shared infrastructure for caching, rate limiting, and Celery.
+The application is a Dockerized FastAPI e-commerce backend with PostgreSQL as the primary relational database and Redis as shared infrastructure for caching, rate limiting, and Celery.
 
 ```text
 Client / Frontend
@@ -44,8 +44,6 @@ The `web` and `celery_worker` services share the application image and internal 
 
 ## 3. Domain Relationships
 
-### Order relationships
-
 ```text
 User
  |
@@ -64,18 +62,6 @@ Each checkout creates one Shipping record for the new Order.
 
 ```text
 Order 1 -------- 1 Shipping
-```
-
-Shipping stores:
-
-```text
-address
-city
-postal_code
-carrier
-tracking_number
-shipped_at
-delivered_at
 ```
 
 ### Payment
@@ -98,11 +84,7 @@ paid_at
 refunded_at
 ```
 
-Database constraints enforce:
-
-- `payments.order_id` foreign key to `orders.id`
-- unique `payments.order_id`
-- unique `payments.transaction_id`
+Database constraints enforce the Payment foreign key and uniqueness of `order_id` and `transaction_id`.
 
 ## 4. Order Lifecycle
 
@@ -162,7 +144,7 @@ If checkout fails, the transaction is rolled back so that an Order or Shipping r
 
 ## 6. Payment Processing
 
-Step 30 adds persistent payment storage.
+Step 30 introduced persistent Payment storage.
 
 ```text
 pending Order
@@ -175,6 +157,7 @@ POST /payment/process
      +---- reject existing payment
      +---- generate transaction_id
      +---- create Payment(status=paid)
+     +---- set paid_at
      +---- set Order.status = paid
      +---- commit
      |
@@ -182,11 +165,42 @@ POST /payment/process
 PaymentResponse
 ```
 
-The current gateway is intentionally a mock implementation.
+The payment gateway is intentionally a mock.
 
-Real provider integration, webhook handling, idempotency keys, and refund processing are future enhancements.
+## 7. Refund Processing — Step 31
 
-## 7. Inventory Concurrency
+Refund is implemented as a domain-level state transition on the existing Payment record; no new database table is required.
+
+```text
+paid Order
+    |
+    v
+POST /payment/{order_id}/refund
+    |
+    +---- verify authenticated ownership
+    +---- load Payment
+    +---- require Order.status == paid
+    +---- require Payment.status == paid
+    +---- reject already-refunded payment
+    +---- set Payment.status = refunded
+    +---- set refunded_at
+    +---- commit
+    |
+    v
+PaymentResponse
+```
+
+Refund endpoint:
+
+```text
+POST /payment/{order_id}/refund
+```
+
+The existing `transaction_id` is preserved. A refund is rejected once fulfillment has started because the order is no longer in `paid` state.
+
+The refund is currently a mock operation and does not contact an external payment provider.
+
+## 8. Inventory Concurrency
 
 Checkout uses SQLAlchemy `with_for_update()` to lock product rows before stock is checked and decremented.
 
@@ -194,7 +208,7 @@ Cancellation uses the same locking strategy before restoring stock.
 
 This prevents concurrent transactions from incorrectly reserving the same inventory.
 
-## 8. Shipping Lifecycle
+## 9. Shipping Lifecycle
 
 ```text
 Checkout
@@ -222,7 +236,7 @@ Shipping management is admin-only:
 PATCH /shipping/{order_id}
 ```
 
-## 9. Persistence and Migrations
+## 10. Persistence and Migrations
 
 Alembic is the authoritative schema-management mechanism.
 
@@ -238,13 +252,7 @@ cff58edd10a9_add_payments_table.py
               HEAD
 ```
 
-Step 30 payment migration creates:
-
-```text
-payments
-```
-
-with:
+Step 30 created `payments` with:
 
 ```text
 id
@@ -257,7 +265,9 @@ paid_at
 refunded_at
 ```
 
-## 10. Redis Usage
+Step 31 requires no additional migration because refund state uses the existing `status` and `refunded_at` columns.
+
+## 11. Redis Usage
 
 Redis is shared by multiple application concerns:
 
@@ -269,7 +279,7 @@ Redis ------------+---- SlowAPI rate-limit storage
                  +---- Celery broker/result backend
 ```
 
-## 11. Authentication and Authorization
+## 12. Authentication and Authorization
 
 JWT Bearer authentication protects user-specific operations.
 
@@ -282,7 +292,9 @@ JWT validation
   v
 get_current_user
   |
-  +---- normal user access
+  +---- payment for own order
+  |
+  +---- refund for own order
   |
   +---- get_current_admin_user
              |
@@ -296,15 +308,19 @@ Examples of admin-only operations:
 - Order status management
 - Shipping management
 
-## 12. Testing and CI
+Payment and refund ownership are enforced at the Order query level.
+
+## 13. Testing and CI
 
 The application is tested with Pytest and HTTPX.
 
-Latest verified suite:
+Latest verified local suite:
 
 ```text
-30 passed
+33 passed
 ```
+
+Coverage includes payment persistence, duplicate payment protection, payment ownership, successful refund, duplicate-refund rejection, refund ownership, refund rejection after processing, and missing-Payment handling.
 
 CI workflow:
 
@@ -319,18 +335,18 @@ GitHub Actions
       +---- pytest
 ```
 
-## 13. Current Status
+## 14. Current Status
 
-Latest documented milestone:
+Latest implemented milestone:
 
 ```text
-Step 30 — Persistent Payment Records
+Step 31 — Payment Refund Flow
 ```
 
-Latest local verification reported:
+Latest local verification:
 
 ```text
-30 passed
+33 passed
 ```
 
 Alembic head:
@@ -339,13 +355,12 @@ Alembic head:
 cff58edd10a9
 ```
 
-## 14. Future Architecture Enhancements
+## 15. Future Architecture Enhancements
 
 - Real payment gateway adapter
 - Payment-provider webhooks
-- Idempotent payment commands
-- Refund service and refund state machine
-- Payment audit/event history
+- Idempotent payment/refund commands
+- Refund audit/event history
 - Structured logging
 - Metrics and monitoring
 - Distributed tracing
