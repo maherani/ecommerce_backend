@@ -151,27 +151,13 @@ paid_at
 refunded_at
 ```
 
-The Payment entity has a one-to-one relationship with Order:
-
-```text
-Order 1 ───── 1 Payment
-```
-
 Payment processing:
 
 ```text
 POST /payment/process
 ```
 
-The endpoint:
-
-- Verifies that the order belongs to the authenticated user.
-- Allows payment only for `pending` orders.
-- Prevents a second payment for the same order.
-- Generates a unique mock transaction ID.
-- Persists the payment record in PostgreSQL.
-- Records the paid timestamp.
-- Changes the order status to `paid`.
+The endpoint verifies ownership, accepts only `pending` orders, prevents duplicate payments, persists a unique transaction ID, records `paid_at`, and changes the order status to `paid`.
 
 Alembic migration:
 
@@ -179,7 +165,45 @@ Alembic migration:
 cff58edd10a9_add_payments_table.py
 ```
 
-The payment implementation remains a mock gateway. Real payment-provider integration and a production refund workflow are future work.
+### Payment Refund — Step 31
+
+Step 31 adds an authenticated refund endpoint for paid orders.
+
+```text
+POST /payment/{order_id}/refund
+```
+
+Refund rules:
+
+- Only the authenticated owner of the order can refund it.
+- The order must be in `paid` state.
+- A Payment record must exist.
+- Only `paid` payments can be refunded.
+- A payment cannot be refunded twice.
+- `refunded_at` is recorded when the refund succeeds.
+- The existing `transaction_id` is preserved in the response.
+
+Refund flow:
+
+```text
+paid order
+    ↓
+POST /payment/{order_id}/refund
+    ↓
+validate ownership
+    ↓
+validate Payment
+    ↓
+validate paid state
+    ↓
+Payment.status = refunded
+    ↓
+refunded_at = now()
+    ↓
+commit
+```
+
+The refund is currently a domain-level mock operation; no real payment provider is contacted.
 
 ## Testing
 
@@ -202,6 +226,11 @@ Coverage includes:
 - Persistent payment creation
 - Duplicate payment protection
 - Payment ownership protection
+- Successful refunds
+- Duplicate-refund protection
+- Refund ownership protection
+- Refund rejection after order processing
+- Refund rejection when no Payment exists
 - End-to-end shopping flow
 
 Run the full suite:
@@ -213,7 +242,7 @@ docker compose exec web pytest -q
 Latest verified full-project result:
 
 ```text
-30 passed
+33 passed
 ```
 
 ## CI/CD
@@ -271,6 +300,7 @@ Step 23 — Order Cancellation & Stock Restoration ✅
 Step 24 — Order Lifecycle & Admin Order Management ✅
 Step 25 — Shipping & Delivery Management        ✅
 Step 30 — Persistent Payment Records            ✅
+Step 31 — Payment Refund Flow                   ✅
 ```
 
 ## Order Lifecycle
@@ -314,7 +344,11 @@ Payment persisted
      ↓
 order = paid
      ↓
-transaction_id + paid_at recorded
+POST /payment/{order_id}/refund
+     ↓
+Payment.status = refunded
+     ↓
+refunded_at recorded
 ```
 
 ## Database
@@ -341,6 +375,8 @@ Payment migration chain:
 40f98fd888bb_add_shipping_table.py
                 ↓
 cff58edd10a9_add_payments_table.py
+                ↓
+No new migration required for Step 31
 ```
 
 ## Development Workflow
@@ -369,20 +405,28 @@ Next step
 
 ## Project Status
 
-Latest completed milestone:
+Latest implemented milestone:
 
 ```text
-Step 30 — Persistent Payment Records
+Step 31 — Payment Refund Flow
 ```
 
-The system now combines inventory reservation, order cancellation, controlled order lifecycle management, first-class shipping/delivery management, and persistent payment records.
+Latest local verification:
+
+```text
+33 passed
+```
+
+The refund workflow is currently a mock domain operation and does not integrate with a real payment gateway.
 
 ## Future Roadmap
 
 Planned areas include:
 
 - Real payment gateway integration
-- Real refund workflow
+- Payment-provider webhooks
+- Idempotency keys for payment requests
+- Payment audit/event history
 - Real email provider integration
 - Administration expansion
 - Refresh tokens
@@ -395,8 +439,7 @@ Planned areas include:
 - API versioning
 - Expanded automated test coverage
 - Advanced inventory reservation and release policies
-- Advanced order workflow and refund integration
-- Inventory audit history
+- Advanced order workflow
 - Celery retry policies and task monitoring
 - Additional background workflows
 
