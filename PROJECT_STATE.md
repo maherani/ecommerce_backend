@@ -2,7 +2,7 @@
 
 ## 1. Objective
 
-Build a production-oriented e-commerce backend using FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT authentication, Alembic, Docker, automated testing, CI/CD, caching, rate limiting, background task processing, inventory management, payment persistence, and production-readiness practices.
+Build a production-oriented e-commerce backend using FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT authentication, Alembic, Docker, automated testing, CI/CD, caching, rate limiting, background task processing, inventory management, payment persistence, refund handling, and production-readiness practices.
 
 Every completed step must be implemented, tested, documented, committed, pushed, and verified before moving to the next step.
 
@@ -15,7 +15,7 @@ Client / Frontend
     FastAPI (web)
        |
        +---- User Module
-       +---- Product Module
+       +---- Product / Category Module
        +---- Cart Module
        +---- Order Module
        |       +---- OrderItem
@@ -63,123 +63,36 @@ Docker Compose:
 - Step 24 — Order lifecycle and admin order management
 - Step 25 — Shipping and delivery management
 - Step 30 — Persistent payment records
+- Step 31 — Payment refund flow
 
-## 4. Current Project Status
+## 4. Implemented Features
 
-### Step 30 — Persistent Payment Records
+### Authentication and Authorization
 
-Step 30 adds a persistent Payment domain entity backed by PostgreSQL.
-
-Implemented:
-
-- `Payment` SQLAlchemy model.
-- One-to-one `Order` ↔ `Payment` relationship.
-- Payment amount persistence using the order total.
-- Payment status persistence.
-- Unique mock transaction ID generation.
-- `created_at`, `paid_at`, and `refunded_at` fields.
-- Protection against paying an order that is not `pending`.
-- Protection against duplicate payment processing.
-- Ownership validation so users cannot pay another user's order.
-- Payment record persisted before returning the successful response.
-- Alembic migration `cff58edd10a9_add_payments_table.py`.
-
-Payment endpoint:
-
-```text
-POST /payment/process
-```
-
-Current payment flow:
-
-```text
-pending order
-      |
-      v
-POST /payment/process
-      |
-      +--> validate ownership
-      +--> validate pending state
-      +--> reject existing payment
-      +--> generate transaction_id
-      +--> create Payment(status=paid)
-      +--> set order.status = paid
-      +--> commit transaction
-      |
-      v
-successful payment response
-```
-
-The gateway remains a mock. Real provider integration and real refund processing are not implemented yet.
-
-### Latest Verification
-
-```text
-30 passed
-```
-
-Verification command:
-
-```bash
-docker compose exec web pytest -q
-```
-
-Migration verification:
-
-```bash
-docker compose exec web alembic current
-docker compose exec db psql -U shop_admin -d ecommerce_db -c "\\d payments"
-```
-
-Expected migration head:
-
-```text
-cff58edd10a9
-```
-
-## 5. Implemented Features
-
-### Authentication
-
-- Registration
-- Login
+- Registration and login
 - Password hashing
 - JWT authentication
 - Current-user dependency
 - Admin/superuser authorization
+- User ownership checks on payment and refund operations
 
-### Product Catalog
+### Product and Inventory
 
-- Categories
-- Products
-- Pagination
-- Search
-- Category filtering
-- Redis caching
-- Cache invalidation
+- Product and category management
+- Pagination, search, category filtering
+- Redis catalog caching
 - Product stock quantity
-
-### Cart
-
-- User-specific cart
-- Add/increment/remove
-- Stock validation
-- Insufficient-stock protection
+- Stock validation in cart
+- Atomic stock reservation during checkout
+- Row-level locking with `with_for_update()`
+- Stock restoration on pending-order cancellation
 
 ### Orders
 
-- Checkout
-- Order history
-- Order items
-- Unit-price locking
-- Atomic stock reservation with row-level locking
-- Transaction rollback on failed checkout
+- Checkout and order history
+- Order items and unit-price locking
 - Pending-order cancellation
-- Stock restoration on cancellation
-- Order ownership validation
-- Admin lifecycle management
-
-Valid lifecycle:
+- Controlled lifecycle:
 
 ```text
 pending → paid → processing → shipped → delivered
@@ -187,22 +100,13 @@ pending → paid → processing → shipped → delivered
    └────────────→ cancelled
 ```
 
-Terminal states:
-
-```text
-delivered
-cancelled
-```
-
-Admin endpoint:
-
-```text
-PATCH /orders/{order_id}/status
-```
+- Admin-only lifecycle management via `PATCH /orders/{order_id}/status`
+- Invalid transitions rejected
+- `delivered` and `cancelled` terminal states
 
 ### Shipping
 
-Step 25 introduced a dedicated Shipping entity.
+Step 25 introduced a dedicated Shipping entity with a one-to-one relationship to Order.
 
 Fields:
 
@@ -218,9 +122,8 @@ delivered_at
 
 Features:
 
-- One-to-one Order ↔ Shipping relationship
-- Shipping creation during checkout
-- Shipping data in OrderResponse
+- Shipping record created during checkout
+- Shipping included in OrderResponse
 - Admin carrier/tracking management
 - `shipped_at` on transition to `shipped`
 - `delivered_at` on transition to `delivered`
@@ -240,7 +143,7 @@ Migration:
 
 ### Payment
 
-Step 30 introduced persistent payment records.
+Step 30 introduced a persistent Payment domain entity.
 
 Payment fields:
 
@@ -255,64 +158,90 @@ paid_at
 refunded_at
 ```
 
+Constraints:
+
+- `order_id` foreign key to `orders.id`
+- unique `order_id` enforcing one Payment per Order
+- unique `transaction_id`
+
+Payment endpoint:
+
+```text
+POST /payment/process
+```
+
+Payment processing:
+
+1. Validate authenticated ownership.
+2. Require `pending` order state.
+3. Reject existing payment.
+4. Generate unique mock transaction ID.
+5. Create `Payment(status='paid')`.
+6. Set `paid_at`.
+7. Set `Order.status = 'paid'`.
+8. Commit transaction.
+
 Migration:
 
 ```text
 cff58edd10a9_add_payments_table.py
 ```
 
-Database constraints include:
+### Refund
 
-- Primary key on `id`
-- Foreign key `order_id -> orders.id`
-- Unique `order_id`
-- Unique `transaction_id`
+Step 31 adds a persistent refund transition using the existing Payment model. No new migration is required.
 
-### Rate Limiting
+Endpoint:
 
-- SlowAPI
-- Redis-backed storage
-- Login rate limit
+```text
+POST /payment/{order_id}/refund
+```
 
-### Celery
+Rules:
 
-- Redis broker
-- Redis result backend
-- Dedicated worker service
-- Welcome-email background task simulation
+- Order must belong to the authenticated user.
+- Payment must exist.
+- Payment must be `paid`.
+- Order must still be `paid`.
+- A refunded payment cannot be refunded again.
+- Successful refund sets `Payment.status = 'refunded'`.
+- Successful refund records `refunded_at`.
+- Existing `transaction_id` is preserved.
+- Refund is currently a mock domain operation; no real gateway call occurs.
 
-## 6. Automated Testing
+## 5. Automated Testing
 
 Pytest coverage includes:
 
-- Authentication
-- Registration/login
-- Protected routes
-- Admin RBAC
-- Products
-- Cart
-- Checkout
-- Inventory validation
-- Atomic stock reservation
-- Order cancellation
-- Stock restoration
-- Order lifecycle
-- Shipping creation
-- Shipping rollback
-- Shipping admin RBAC
-- Shipping lifecycle timestamps
+- Authentication and authorization
+- Product/cart operations
+- Checkout and inventory
+- Order cancellation and stock restoration
+- Order lifecycle and admin RBAC
+- Shipping creation, rollback, authorization, and timestamps
 - Payment persistence
 - Duplicate payment protection
 - Payment ownership protection
+- Successful refund
+- Duplicate-refund protection
+- Refund ownership protection
+- Refund rejection after processing
+- Refund rejection when no Payment exists
 - End-to-end purchase flow
 
-Latest full suite:
+Latest full-suite verification:
 
 ```text
-30 passed
+33 passed
 ```
 
-## 7. Database
+Command:
+
+```bash
+docker compose exec web pytest -q
+```
+
+## 6. Database
 
 Current application tables:
 
@@ -328,9 +257,9 @@ payments
 alembic_version
 ```
 
-Alembic is the authoritative schema-management mechanism.
+Alembic is the authoritative database schema-management mechanism.
 
-Current migration chain relevant to the latest domain additions:
+Relevant migration chain:
 
 ```text
 40f98fd888bb_add_shipping_table.py
@@ -342,7 +271,9 @@ cff58edd10a9_add_payments_table.py
               HEAD
 ```
 
-## 8. Technology Stack
+No new migration is required for Step 31 because refund state uses existing `payments.status` and `payments.refunded_at` columns.
+
+## 7. Technology Stack
 
 - Python 3.12 slim
 - FastAPI 0.104.1
@@ -359,80 +290,69 @@ cff58edd10a9_add_payments_table.py
 - Swagger / OpenAPI
 - GitHub Actions
 
-## 9. Repository Status
+## 8. Repository Status
 
-Documentation on GitHub has been updated for Step 30.
+Step 31 implementation has been committed and pushed to `main`.
 
-The application implementation for Step 30 consists of:
+The latest local verification is:
 
 ```text
-alembic/env.py
-app/modules/order/models.py
-app/modules/payment/models.py
-app/modules/payment/router.py
-tests/test_shop.py
-alembic/versions/cff58edd10a9_add_payments_table.py
+33 passed
 ```
 
-Before declaring the repository milestone fully synchronized, confirm that the local Step 30 implementation has been committed and pushed and that GitHub Actions is green.
+Documentation was updated directly on GitHub after the Step 31 code push. Local and remote Git synchronization must be checked before starting the next step.
 
-## 10. Major Lessons Learned
+## 9. Major Lessons Learned
 
-- Redis is shared by product caching, rate limiting, and Celery.
 - Alembic is the authoritative schema-management mechanism.
 - Inventory must be re-checked during checkout even after cart validation.
 - Checkout and stock changes must remain in one transaction.
 - Row-level locking is required for concurrent inventory updates.
 - Cancellation must restore reserved inventory safely.
-- Cancellation must be restricted to valid order states.
-- Order ownership must be checked before allowing cancellation.
-- Stock restoration should use row-level locking for consistency with checkout.
-- A payment should be persisted as a domain entity rather than represented only by a response.
-- `order_id` being unique enforces the one-payment-per-order rule at the database level.
-- `transaction_id` must be unique to avoid duplicate transaction identifiers.
-- The current payment gateway is intentionally a mock; real gateway/refund integration is future work.
+- Order ownership must be checked before cancellation, payment, and refund operations.
+- Payment should be persisted as a domain entity rather than represented only by a response.
+- `order_id` uniqueness enforces one Payment per Order.
+- `transaction_id` must be unique.
+- Refund eligibility must be tied to the current paid state to prevent refunding after fulfillment has started.
+- The current payment gateway and refund operation are intentionally mocks; real provider integration remains future work.
 
-## 11. Current Known Good State
+## 10. Current Known Good State
 
 ```text
 Step 25 — Shipping and Delivery Management     COMPLETED
-Step 30 — Persistent Payment Records            IMPLEMENTED
-Tests                                            30 passed
+Step 30 — Persistent Payment Records            COMPLETED
+Step 31 — Payment Refund Flow                   IMPLEMENTED
+Tests                                            33 passed
 Alembic head                                    cff58edd10a9
 ```
 
-## 12. Pending Work
+## 11. Pending Work
 
-- Synchronize Step 30 implementation with GitHub if local changes are still unpushed.
-- Confirm green CI for the Step 30 commit.
-- Continue with the next planned development step only after repository synchronization.
+- Verify GitHub Actions is green for the latest Step 31 commit.
+- Verify local `main` is synchronized with `origin/main` after documentation updates.
+- Continue to the next milestone only after code, tests, documentation, Git state, and CI are consistent.
 
-## 13. Future Enhancements
+## 12. Future Enhancements
 
 - Real payment gateway integration
-- Real refund workflow
-- Payment provider webhooks
-- Idempotency keys for payment requests
-- Payment audit history
-- Real email provider
+- Payment-provider webhooks
+- Idempotency keys for payment commands
+- Payment audit/event history
+- Real email provider integration
 - Refresh tokens
 - Structured logging
 - Metrics and monitoring
 - Distributed tracing
-- Production configuration
-- Security hardening
+- Production security hardening
 - API versioning
-- Inventory audit history
-- Advanced reservation/release policies
+- Advanced inventory reservation/release policies
 - Celery retry policies and monitoring
 
-## 14. Next Recommended Step
+## 13. Next Recommended Step
 
-After Step 30 is committed, pushed, and verified by green GitHub Actions, continue to the next planned development milestone.
+After confirming Step 31 push and CI, choose the next domain milestone. Do not start the next feature while the current implementation, tests, documentation, Git state, and CI status are inconsistent.
 
-Do not start the next feature while the current implementation, tests, documentation, Git state, and CI status are inconsistent.
-
-## 15. Notes For Future Sessions
+## 14. Notes For Future Sessions
 
 Always begin by checking:
 
@@ -443,4 +363,4 @@ docker compose exec web pytest -q
 docker compose exec web alembic current
 ```
 
-Then compare the local state with `PROJECT_STATE.md` and the latest GitHub state before making changes.
+Then compare local state with `PROJECT_STATE.md` and GitHub before making changes.
