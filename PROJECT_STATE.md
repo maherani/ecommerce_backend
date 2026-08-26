@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 ## Objective
-Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, and production-readiness practices.
+Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, and production-readiness practices.
 
 ## Current Architecture
 
@@ -31,6 +31,7 @@ Steps 1–25 completed, followed by:
 - Step 31 — Payment refund flow
 - Step 32 — Payment idempotency
 - Step 33 — Payment audit history
+- Step 34 — Rich payment audit metadata
 
 ## Implemented Features
 
@@ -107,6 +108,47 @@ Migration:
 e124ed32b079_add_payment_events_table.py
 ```
 
+### Rich Payment Audit Metadata — Step 34
+
+`PaymentEvent` now records the authenticated actor and structured event context.
+
+Additional fields:
+
+```text
+actor_user_id
+metadata (JSON)
+```
+
+`actor_user_id` is a nullable foreign key to `users.id`, allowing each event to identify the authenticated user responsible for the action.
+
+The JSON `metadata` column stores contextual information for audit analysis, including order ID, payment amount, transaction ID, and refund timestamp where applicable.
+
+Payment event examples:
+
+```text
+payment_created
+    actor_user_id = authenticated user
+    metadata = {
+        order_id,
+        amount,
+        transaction_id
+    }
+
+payment_refunded
+    actor_user_id = authenticated user
+    metadata = {
+        order_id,
+        transaction_id,
+        refunded_at
+    }
+```
+
+Migration:
+
+```text
+2a408bf8badb_add_payment_audit_metadata.py
+```
+
 ## Testing
 
 Latest full-suite verification:
@@ -121,7 +163,7 @@ Command:
 docker compose exec web pytest -q
 ```
 
-Step 33 coverage includes audit-event persistence and duplicate-event protection for idempotent payment replay.
+Step 34 coverage includes actor attribution and structured metadata for payment and refund audit events.
 
 ## Database Migration Chain
 
@@ -133,17 +175,19 @@ cff58edd10a9_add_payments_table.py
 aea3438feb25_add_payment_idempotency_key.py
                 ↓
 e124ed32b079_add_payment_events_table.py
+                ↓
+2a408bf8badb_add_payment_audit_metadata.py
 ```
 
 ## Repository Status
 
-Local Step 33 implementation commit:
+Local Step 34 implementation commit:
 
 ```text
-e5a47f0 feat: add payment audit history
+bee233b feat: enrich payment audit metadata
 ```
 
-The implementation was locally verified with 37 passing tests and a clean diff before documentation synchronization.
+The implementation was locally verified with 37 passing tests and a clean working tree before documentation synchronization.
 
 ## Current Known Good State
 
@@ -151,9 +195,10 @@ The implementation was locally verified with 37 passing tests and a clean diff b
 Step 30 — Persistent Payment Records      COMPLETED
 Step 31 — Payment Refund Flow             COMPLETED
 Step 32 — Payment Idempotency             COMPLETED
-Step 33 — Payment Audit History           IMPLEMENTED
+Step 33 — Payment Audit History           COMPLETED
+Step 34 — Rich Payment Audit Metadata     IMPLEMENTED
 Tests                                     37 passed
-Alembic head                              e124ed32b079
+Alembic head                              2a408bf8badb
 ```
 
 ## Major Lessons Learned
@@ -164,19 +209,20 @@ Alembic head                              e124ed32b079
 - Payment/refund ownership must be enforced before state changes.
 - Audit history should be append-only and stored separately from mutable Payment state.
 - Duplicate idempotent requests must not create duplicate audit events.
+- Audit actors and structured metadata make payment history operationally traceable.
 - Payment and refund are still mock provider operations.
 
 ## Pending Work
 
 - Synchronize local `main` with the latest GitHub documentation commits.
-- Push the Step 33 implementation after synchronization.
-- Verify GitHub Actions is green for the final Step 33 remote state.
+- Push the Step 34 implementation after synchronization.
+- Verify GitHub Actions is green for the final Step 34 remote state.
 
 ## Future Enhancements
 
 - Real payment gateway integration
 - Provider webhooks
-- Richer payment audit metadata and actor information
+- Richer payment audit event types and correlation IDs
 - Structured logging
 - Metrics and monitoring
 - Distributed tracing
