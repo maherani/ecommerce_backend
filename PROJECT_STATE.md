@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 ## Objective
-Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, and production-readiness practices.
+Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, payment webhooks, and production-readiness practices.
 
 ## Current Architecture
 
@@ -32,6 +32,7 @@ Steps 1–25 completed, followed by:
 - Step 32 — Payment idempotency
 - Step 33 — Payment audit history
 - Step 34 — Rich payment audit metadata
+- Step 35 — Payment webhooks
 
 ## Implemented Features
 
@@ -86,13 +87,18 @@ payment_id
 event_type
 status
 created_at
+actor_user_id
+metadata
+event_id
 ```
 
-Current event types:
+Current event types include:
 
 ```text
 payment_created
 payment_refunded
+webhook_paid
+webhook_refunded
 ```
 
 Behavior:
@@ -100,7 +106,8 @@ Behavior:
 - Successful payment creates one `payment_created` event.
 - Successful refund creates one `payment_refunded` event.
 - Replaying the same idempotent payment request does not create another event.
-- Events are linked to the Payment with a one-to-many relationship and cascade on Payment deletion.
+- Webhook delivery can create an immutable webhook audit event.
+- Events are linked to Payment with a one-to-many relationship and cascade on Payment deletion.
 
 Migration:
 
@@ -110,7 +117,7 @@ e124ed32b079_add_payment_events_table.py
 
 ### Rich Payment Audit Metadata — Step 34
 
-`PaymentEvent` now records the authenticated actor and structured event context.
+`PaymentEvent` records the authenticated actor and structured event context.
 
 Additional fields:
 
@@ -119,29 +126,7 @@ actor_user_id
 metadata (JSON)
 ```
 
-`actor_user_id` is a nullable foreign key to `users.id`, allowing each event to identify the authenticated user responsible for the action.
-
-The JSON `metadata` column stores contextual information for audit analysis, including order ID, payment amount, transaction ID, and refund timestamp where applicable.
-
-Payment event examples:
-
-```text
-payment_created
-    actor_user_id = authenticated user
-    metadata = {
-        order_id,
-        amount,
-        transaction_id
-    }
-
-payment_refunded
-    actor_user_id = authenticated user
-    metadata = {
-        order_id,
-        transaction_id,
-        refunded_at
-    }
-```
+`actor_user_id` is a nullable foreign key to `users.id`. Metadata stores contextual information such as order ID, amount, transaction ID, refund timestamp, webhook event ID, and source.
 
 Migration:
 
@@ -149,12 +134,48 @@ Migration:
 2a408bf8badb_add_payment_audit_metadata.py
 ```
 
+### Payment Webhooks — Step 35
+
+A provider callback endpoint is exposed at:
+
+```text
+POST /payment/webhook
+```
+
+Webhook payload:
+
+```text
+transaction_id
+status
+event_id
+```
+
+Security:
+
+- HMAC-SHA256 signature validation using `PAYMENT_WEBHOOK_SECRET`.
+- Requests with an invalid signature return HTTP 401.
+
+Processing rules:
+
+- Unknown transaction IDs return HTTP 404.
+- Unsupported statuses return HTTP 400.
+- `paid` updates Payment and Order to paid and records `paid_at` when needed.
+- `refunded` updates Payment and Order to refunded/cancelled and records `refunded_at` when needed.
+- Each processed webhook creates a `PaymentEvent` with the webhook `event_id` and source metadata.
+- Repeated delivery with the same `event_id` is treated as already processed and does not create a duplicate event.
+
+Migration:
+
+```text
+e3e6a6bd5e42_add_payment_webhook_event_id.py
+```
+
 ## Testing
 
 Latest full-suite verification:
 
 ```text
-37 passed
+41 passed
 ```
 
 Command:
@@ -163,7 +184,7 @@ Command:
 docker compose exec web pytest -q
 ```
 
-Step 34 coverage includes actor attribution and structured metadata for payment and refund audit events.
+Step 35 coverage includes valid/invalid HMAC signatures, unknown payments, unsupported statuses, successful webhook handling, and duplicate webhook protection.
 
 ## Database Migration Chain
 
@@ -177,17 +198,19 @@ aea3438feb25_add_payment_idempotency_key.py
 e124ed32b079_add_payment_events_table.py
                 ↓
 2a408bf8badb_add_payment_audit_metadata.py
+                ↓
+e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
 ## Repository Status
 
-Local Step 34 implementation commit:
+Local Step 35 implementation commit:
 
 ```text
-bee233b feat: enrich payment audit metadata
+1a38376 feat: add payment webhooks
 ```
 
-The implementation was locally verified with 37 passing tests and a clean working tree before documentation synchronization.
+The implementation was locally verified with 41 passing tests and a clean diff before documentation synchronization.
 
 ## Current Known Good State
 
@@ -196,9 +219,10 @@ Step 30 — Persistent Payment Records      COMPLETED
 Step 31 — Payment Refund Flow             COMPLETED
 Step 32 — Payment Idempotency             COMPLETED
 Step 33 — Payment Audit History           COMPLETED
-Step 34 — Rich Payment Audit Metadata     IMPLEMENTED
-Tests                                     37 passed
-Alembic head                              2a408bf8badb
+Step 34 — Rich Payment Audit Metadata     COMPLETED
+Step 35 — Payment Webhooks                IMPLEMENTED
+Tests                                     41 passed
+Alembic head                              e3e6a6bd5e42
 ```
 
 ## Major Lessons Learned
@@ -210,18 +234,19 @@ Alembic head                              2a408bf8badb
 - Audit history should be append-only and stored separately from mutable Payment state.
 - Duplicate idempotent requests must not create duplicate audit events.
 - Audit actors and structured metadata make payment history operationally traceable.
-- Payment and refund are still mock provider operations.
+- Webhooks require signature verification and their own idempotency mechanism.
+- Payment and refund remain mock provider operations.
 
 ## Pending Work
 
 - Synchronize local `main` with the latest GitHub documentation commits.
-- Push the Step 34 implementation after synchronization.
-- Verify GitHub Actions is green for the final Step 34 remote state.
+- Push the Step 35 implementation after synchronization.
+- Verify GitHub Actions is green for the final Step 35 remote state.
 
 ## Future Enhancements
 
 - Real payment gateway integration
-- Provider webhooks
+- Provider webhook delivery/retry infrastructure
 - Richer payment audit event types and correlation IDs
 - Structured logging
 - Metrics and monitoring
