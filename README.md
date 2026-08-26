@@ -15,7 +15,7 @@ Client / Frontend
        +---- Cart
        +---- Order / OrderItem
        |       +---- Shipping (1:1)
-       |       +---- Payment  (1:1)
+       |       +---- Payment (1:1)
        |               +---- PaymentEvent (1:N)
        +---- Rate Limiting
        +---- Background Tasks
@@ -88,25 +88,46 @@ payment_created
 payment_refunded
 ```
 
+### Step 34 — Rich Payment Audit Metadata
+
+Step 34 enriches `PaymentEvent` records with the actor responsible for the event and structured event metadata.
+
+Additional fields:
+
+```text
+actor_user_id
+metadata (JSON)
+```
+
+`actor_user_id` references the authenticated user who triggered the event. Metadata records contextual information such as order ID, amount, transaction ID, and refund timestamp.
+
 Payment flow:
 
 ```text
 Payment created
      ↓
-payment_created event
+PaymentEvent(
+  payment_created,
+  actor_user_id,
+  metadata
+)
 
 Payment refunded
      ↓
-payment_refunded event
+PaymentEvent(
+  payment_refunded,
+  actor_user_id,
+  metadata
+)
 ```
 
-Duplicate idempotent requests do not create duplicate audit events.
-
-Migration:
+The migration is:
 
 ```text
-e124ed32b079_add_payment_events_table.py
+2a408bf8badb_add_payment_audit_metadata.py
 ```
+
+Migration and database constraints keep the audit actor linked to `users.id`.
 
 ## Testing
 
@@ -122,7 +143,7 @@ Latest verified result:
 37 passed
 ```
 
-Coverage includes payment persistence, duplicate-payment protection, refunds, refund authorization, idempotency replay handling, cross-order key protection, PaymentEvent persistence, and duplicate-event protection.
+Coverage includes payment persistence, duplicate-payment protection, refunds, refund authorization, idempotency replay handling, cross-order key protection, PaymentEvent persistence, duplicate-event protection, actor attribution, and structured audit metadata.
 
 ## Current Development Progress
 
@@ -156,6 +177,7 @@ Step 30 — Persistent Payment Records            ✅
 Step 31 — Payment Refund Flow                   ✅
 Step 32 — Payment Idempotency                   ✅
 Step 33 — Payment Audit History                 ✅
+Step 34 — Rich Payment Audit Metadata           ✅
 ```
 
 ## Database Migration Chain
@@ -168,6 +190,8 @@ cff58edd10a9_add_payments_table.py
 aea3438feb25_add_payment_idempotency_key.py
                 ↓
 e124ed32b079_add_payment_events_table.py
+                ↓
+2a408bf8badb_add_payment_audit_metadata.py
 ```
 
 ## Development Workflow
@@ -181,7 +205,7 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest implemented milestone:
 
 ```text
-Step 33 — Payment Audit History
+Step 34 — Rich Payment Audit Metadata
 ```
 
 Latest verified local test result:
@@ -190,7 +214,7 @@ Latest verified local test result:
 37 passed
 ```
 
-Payment audit history is currently implemented at the domain/database level; real payment-provider integration remains future work.
+Payment audit metadata is currently implemented at the domain/database level; real payment-provider integration remains future work.
 
 ## Documentation
 
