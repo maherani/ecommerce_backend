@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 ## Objective
-Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, and production-readiness practices.
+Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, and production-readiness practices.
 
 ## Current Architecture
 
@@ -15,6 +15,7 @@ FastAPI
   ├── Order / OrderItem
   │     ├── Shipping (1:1)
   │     └── Payment  (1:1)
+  │             └── PaymentEvent (1:N)
   ├── Rate Limiting
   └── Background Tasks
 
@@ -29,6 +30,7 @@ Steps 1–25 completed, followed by:
 - Step 30 — Persistent payment records
 - Step 31 — Payment refund flow
 - Step 32 — Payment idempotency
+- Step 33 — Payment audit history
 
 ## Implemented Features
 
@@ -52,13 +54,7 @@ Persistent `Payment` entity with `order_id`, `amount`, `status`, `transaction_id
 
 ### Idempotency — Step 32
 
-`Payment` now stores:
-
-```text
-idempotency_key
-```
-
-The database enforces:
+`Payment` stores `idempotency_key` with database uniqueness:
 
 ```text
 UNIQUE(idempotency_key)
@@ -77,12 +73,46 @@ Migration:
 aea3438feb25_add_payment_idempotency_key.py
 ```
 
+### Payment Audit History — Step 33
+
+A dedicated `PaymentEvent` entity and `payment_events` table record important Payment state changes as append-only audit records.
+
+Fields:
+
+```text
+id
+payment_id
+event_type
+status
+created_at
+```
+
+Current event types:
+
+```text
+payment_created
+payment_refunded
+```
+
+Behavior:
+
+- Successful payment creates one `payment_created` event.
+- Successful refund creates one `payment_refunded` event.
+- Replaying the same idempotent payment request does not create another event.
+- Events are linked to the Payment with a one-to-many relationship and cascade on Payment deletion.
+
+Migration:
+
+```text
+e124ed32b079_add_payment_events_table.py
+```
+
 ## Testing
 
 Latest full-suite verification:
 
 ```text
-35 passed
+37 passed
 ```
 
 Command:
@@ -91,7 +121,7 @@ Command:
 docker compose exec web pytest -q
 ```
 
-Step 32 coverage includes idempotency persistence, duplicate request replay, and cross-order key reuse protection.
+Step 33 coverage includes audit-event persistence and duplicate-event protection for idempotent payment replay.
 
 ## Database Migration Chain
 
@@ -101,26 +131,29 @@ Step 32 coverage includes idempotency persistence, duplicate request replay, and
 cff58edd10a9_add_payments_table.py
                 ↓
 aea3438feb25_add_payment_idempotency_key.py
+                ↓
+e124ed32b079_add_payment_events_table.py
 ```
 
 ## Repository Status
 
-Local Step 32 implementation commit:
+Local Step 33 implementation commit:
 
 ```text
-7035c30 feat: add payment idempotency
+e5a47f0 feat: add payment audit history
 ```
 
-Local working tree was clean after the commit. Documentation is being synchronized on GitHub for Step 32.
+The implementation was locally verified with 37 passing tests and a clean diff before documentation synchronization.
 
 ## Current Known Good State
 
 ```text
 Step 30 — Persistent Payment Records      COMPLETED
 Step 31 — Payment Refund Flow             COMPLETED
-Step 32 — Payment Idempotency             IMPLEMENTED
-Tests                                     35 passed
-Alembic head                              aea3438feb25
+Step 32 — Payment Idempotency             COMPLETED
+Step 33 — Payment Audit History           IMPLEMENTED
+Tests                                     37 passed
+Alembic head                              e124ed32b079
 ```
 
 ## Major Lessons Learned
@@ -129,19 +162,21 @@ Alembic head                              aea3438feb25
 - Database uniqueness is required in addition to application checks for payment idempotency.
 - Idempotency must distinguish replaying the same command from reusing a key for another order.
 - Payment/refund ownership must be enforced before state changes.
+- Audit history should be append-only and stored separately from mutable Payment state.
+- Duplicate idempotent requests must not create duplicate audit events.
 - Payment and refund are still mock provider operations.
 
 ## Pending Work
 
-- Sync local `main` with the latest GitHub documentation commit.
-- Push the local Step 32 implementation commit after synchronization.
-- Verify GitHub Actions is green for the final Step 32 remote state.
+- Synchronize local `main` with the latest GitHub documentation commits.
+- Push the Step 33 implementation after synchronization.
+- Verify GitHub Actions is green for the final Step 33 remote state.
 
 ## Future Enhancements
 
 - Real payment gateway integration
 - Provider webhooks
-- Payment audit/event history
+- Richer payment audit metadata and actor information
 - Structured logging
 - Metrics and monitoring
 - Distributed tracing
