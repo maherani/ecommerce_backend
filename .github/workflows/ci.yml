@@ -25,6 +25,7 @@ jobs:
           echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
           echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
           echo "REDIS_URL=redis://redis:6379/0" >> .env
+          echo "PAYMENT_WEBHOOK_SECRET=${{ secrets.PAYMENT_WEBHOOK_SECRET }}" >> .env
 
       - name: Build and start Docker containers
         run: docker compose up -d --build
