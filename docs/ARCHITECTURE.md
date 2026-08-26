@@ -11,7 +11,7 @@ FastAPI
   ├── Cart
   ├── Order / OrderItem
   │     ├── Shipping (1:1)
-  │     └── Payment  (1:1)
+  │     └── Payment (1:1)
   │             └── PaymentEvent (1:N)
   ├── Rate Limiting
   └── Background Tasks
@@ -104,16 +104,7 @@ Payment refunded
 PaymentEvent(payment_refunded)
 ```
 
-`PaymentEvent` fields:
-
-```text
-payment_id
-event_type
-status
-created_at
-```
-
-Audit events are stored separately from mutable Payment state. Replaying the same idempotent payment request returns the existing payment and does not create another audit event.
+`PaymentEvent` stores the immutable audit record separately from mutable Payment state.
 
 ### Step 34 — Rich Payment Audit Metadata
 
@@ -131,25 +122,55 @@ PaymentEvent
     +---- created_at
 ```
 
-The authenticated user is stored in `actor_user_id` for payment and refund events. Structured JSON metadata captures contextual information such as order ID, payment amount, transaction ID, and refund timestamp.
+The authenticated user is stored as the actor for user-generated payment/refund events. Structured JSON metadata records contextual information such as order ID, amount, transaction ID, and refund timestamp.
 
-Payment event creation now follows this pattern:
+### Step 35 — Payment Webhooks
 
 ```text
-authenticated request
-        ↓
-state change
-        ↓
+External Provider
+       ↓
+POST /payment/webhook
+       ↓
+verify HMAC-SHA256 signature
+       ↓
+check event_id
+       |
+       +---- already processed → return existing result
+       |
+       v
+lookup Payment by transaction_id
+       ↓
+validate webhook status
+       ↓
+update Payment / Order
+       ↓
 create PaymentEvent
-        ├── actor_user_id
-        ├── event_type
-        ├── status
-        └── metadata
-        ↓
+       ↓
 commit
 ```
 
-The actor foreign key is nullable for compatibility with non-user-generated events that may be introduced later.
+Webhook payload:
+
+```text
+transaction_id
+status
+event_id
+```
+
+Security:
+
+- `PAYMENT_WEBHOOK_SECRET` is used to calculate the HMAC-SHA256 digest.
+- Signature comparison uses a constant-time comparison.
+- Invalid signatures are rejected with HTTP 401.
+
+Supported state changes:
+
+```text
+paid     → Payment.status=paid, Order.status=paid
+refunded → Payment.status=refunded, Order.status=cancelled
+```
+
+Webhook audit records contain `event_id` and identify their source as `payment_webhook`. A unique `event_id` prevents duplicate webhook processing.
 
 ## 4. Checkout Transaction
 
@@ -177,7 +198,7 @@ Failed checkout rolls back the transaction.
 
 ## 5. Authentication / Authorization
 
-JWT authentication protects user-specific payment and refund operations. Ownership is checked at the Order query level before Payment state changes. Audit events record the authenticated actor responsible for those changes.
+JWT authentication protects user-specific payment and refund operations. Ownership is checked at the Order query level before Payment state changes. Webhooks are provider-authenticated by HMAC rather than user JWT.
 
 ## 6. Persistence and Migrations
 
@@ -193,30 +214,32 @@ aea3438feb25_add_payment_idempotency_key.py
 e124ed32b079_add_payment_events_table.py
                 ↓
 2a408bf8badb_add_payment_audit_metadata.py
+                ↓
+e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Step 34 adds `actor_user_id` with a foreign key to `users.id` and a JSON `metadata` column to `payment_events`.
+Step 35 adds a unique `event_id` to `payment_events` so provider webhook delivery can be handled idempotently.
 
 ## 7. Testing and CI
 
 Latest verified local suite:
 
 ```text
-37 passed
+41 passed
 ```
 
-CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
+Coverage includes valid/invalid webhook signatures, unknown payments, unsupported statuses, successful webhook handling, and duplicate webhook protection.
 
-Step 34 tests cover actor attribution and structured metadata for payment and refund audit events.
+CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
 
 ## 8. Current Status
 
 ```text
-Step 34 — Rich Payment Audit Metadata
+Step 35 — Payment Webhooks
 ```
 
 Local implementation commit:
 
 ```text
-bee233b feat: enrich payment audit metadata
+1a38376 feat: add payment webhooks
 ```
