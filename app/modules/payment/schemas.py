@@ -10,3 +10,7 @@ class PaymentResponse(BaseModel):
     status: str
     message: str
     transaction_id: str
+class PaymentWebhookRequest(BaseModel):
+    transaction_id: str
+    status: str
+    event_id: str

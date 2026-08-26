@@ -56,6 +56,7 @@ class PaymentEvent(Base):
        nullable=True
     )
     event_type = Column(String, nullable=False)
+    event_id = Column(String, nullable=True, unique=True)
     status = Column(String, nullable=False)
 
     event_metadata = Column(

@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-
+    # Payment webhook security.
+    PAYMENT_WEBHOOK_SECRET: str
     # Build the SQLAlchemy connection URL from environment variables.
     @property
     def DATABASE_URL(self) -> str:

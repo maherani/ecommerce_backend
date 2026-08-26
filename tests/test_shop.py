@@ -1,9 +1,14 @@
+import hashlib
+import hmac
+
 from app.core.database import SessionLocal
 from app.modules.payment.models import Payment
 from app.modules.shipping.models import Shipping
 from app.modules.order.models import Order
 from app.modules.product.models import Product
 from app.modules.payment.models import Payment, PaymentEvent
+from app.core.config import settings
+from app.modules.payment.schemas import PaymentWebhookRequest
 
 def test_products_list(client):
     """تست دریافت لیست محصولات"""
@@ -1841,5 +1846,298 @@ def test_idempotent_payment_does_not_create_duplicate_event(
 
         assert len(events) == 1
         assert events[0].event_type == "payment_created"
+    finally:
+        db.close()
+
+def test_payment_webhook_signature_validation(client, auth_token):
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers=headers
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers=headers
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers=headers
+    )
+
+    assert payment_res.status_code == 200
+
+    transaction_id = payment_res.json()["transaction_id"]
+
+    webhook_payload = {
+        "transaction_id": transaction_id,
+        "status": "paid",
+        "event_id": "webhook-test-001",
+    }
+
+    payload_bytes = (
+        PaymentWebhookRequest(**webhook_payload)
+        .model_dump_json()
+        .encode()
+    )
+
+    valid_signature = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    valid_response = client.post(
+        "/payment/webhook",
+        json=webhook_payload,
+        params={"signature": valid_signature},
+    )
+
+    assert valid_response.status_code == 200
+
+    invalid_response = client.post(
+        "/payment/webhook",
+        json=webhook_payload,
+        params={"signature": "invalid-signature"},
+    )
+
+    assert invalid_response.status_code == 401
+def test_payment_webhook_rejects_invalid_payment_and_status(client):
+    unknown_payload = {
+        "transaction_id": "TRX-UNKNOWN-001",
+        "status": "paid",
+        "event_id": "webhook-error-001",
+    }
+
+    payload_bytes = (
+        PaymentWebhookRequest(**unknown_payload)
+        .model_dump_json()
+        .encode()
+    )
+
+    valid_signature = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    not_found_response = client.post(
+        "/payment/webhook",
+        json=unknown_payload,
+        params={"signature": valid_signature},
+    )
+
+    assert not_found_response.status_code == 404
+    assert not_found_response.json()["detail"] == "Payment not found"
+def test_payment_webhook_rejects_unsupported_status(
+    client,
+    auth_token
+):
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1,
+        },
+        headers=headers,
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890",
+        },
+        headers=headers,
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers=headers,
+    )
+
+    assert payment_res.status_code == 200
+
+    transaction_id = payment_res.json()["transaction_id"]
+
+    webhook_payload = {
+        "transaction_id": transaction_id,
+        "status": "unknown_status",
+        "event_id": "webhook-invalid-status-001",
+    }
+
+    payload_bytes = (
+        PaymentWebhookRequest(**webhook_payload)
+        .model_dump_json()
+        .encode()
+    )
+
+    valid_signature = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = client.post(
+        "/payment/webhook",
+        json=webhook_payload,
+        params={"signature": valid_signature},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported payment status"
+def test_payment_webhook_is_idempotent(
+    client,
+    auth_token
+):
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1,
+        },
+        headers=headers,
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890",
+        },
+        headers=headers,
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers=headers,
+    )
+
+    assert payment_res.status_code == 200
+
+    transaction_id = payment_res.json()["transaction_id"]
+
+    webhook_payload = {
+        "transaction_id": transaction_id,
+        "status": "paid",
+        "event_id": "webhook-idempotency-001",
+    }
+
+    payload_bytes = (
+        PaymentWebhookRequest(**webhook_payload)
+        .model_dump_json()
+        .encode()
+    )
+
+    signature = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    first_response = client.post(
+        "/payment/webhook",
+        json=webhook_payload,
+        params={"signature": signature},
+    )
+
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/payment/webhook",
+        json=webhook_payload,
+        params={"signature": signature},
+    )
+
+    assert second_response.status_code == 200
+    assert second_response.json()["message"] == "Webhook already processed"
+    assert second_response.json()["transaction_id"] == transaction_id
+
+    db = SessionLocal()
+    try:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .first()
+        )
+
+        assert payment is not None
+
+        events = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.payment_id == payment.id)
+            .filter(PaymentEvent.event_id == "webhook-idempotency-001")
+            .all()
+        )
+
+        assert len(events) == 1
     finally:
         db.close()
