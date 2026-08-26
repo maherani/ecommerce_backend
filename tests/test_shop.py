@@ -1262,3 +1262,186 @@ def test_refund_after_processing_is_rejected(
     assert refund_res.json()["detail"] == (
         "Only paid payments can be refunded"
     )
+def test_user_cannot_refund_other_users_order(
+    client,
+    auth_token,
+    test_user
+):
+    """کاربر نباید بتواند سفارش پرداخت‌شده کاربر دیگری را refund کند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert payment_res.status_code == 200
+
+    login_res = client.post(
+        "/users/login",
+        data={
+            "username": test_user["email"],
+            "password": test_user["password"]
+        }
+    )
+
+    assert login_res.status_code == 200
+
+    other_user_token = login_res.json()["access_token"]
+
+    refund_res = client.post(
+        f"/payment/{order_id}/refund",
+        headers={"Authorization": f"Bearer {other_user_token}"}
+    )
+
+    assert refund_res.status_code == 404
+    assert refund_res.json()["detail"] == "Order not found"
+
+def test_refund_persists_payment_state(client, auth_token):
+    """Refund باید وضعیت Payment را به‌صورت پایدار ثبت کند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert payment_res.status_code == 200
+
+    refund_res = client.post(
+        f"/payment/{order_id}/refund",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert refund_res.status_code == 200
+
+    db = SessionLocal()
+    try:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .first()
+        )
+
+        assert payment is not None
+        assert payment.status == "refunded"
+        assert payment.refunded_at is not None
+        assert payment.transaction_id == payment_res.json()["transaction_id"]
+    finally:
+        db.close()
+
+def test_refund_without_payment_returns_404(client, auth_token):
+    """Refund سفارشی که Payment ندارد باید 404 باشد."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    refund_res = client.post(
+        f"/payment/{order_id}/refund",
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert refund_res.status_code == 404
+    assert refund_res.json()["detail"] == "Payment not found"

@@ -65,3 +65,56 @@ def process_payment(
         message="Payment processed successfully",
         transaction_id=payment.transaction_id
     )
+@router.post("/{order_id}/refund", response_model=schemas.PaymentResponse)
+def refund_payment(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """بازپرداخت سفارش پرداخت‌شده"""
+
+    order = db.query(Order).filter(
+        Order.id == order_id,
+        Order.user_id == current_user.id
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found"
+        )
+
+    payment = db.query(models.Payment).filter(
+        models.Payment.order_id == order.id
+    ).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found"
+        )
+
+    if payment.status == "refunded":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payment is already refunded"
+        )
+
+    if payment.status != "paid" or order.status != "paid":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only paid payments can be refunded"
+        )
+
+    payment.status = "refunded"
+    payment.refunded_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(payment)
+
+    return schemas.PaymentResponse(
+        order_id=order.id,
+        status=payment.status,
+        message="Payment refunded successfully",
+        transaction_id=payment.transaction_id
+    )
