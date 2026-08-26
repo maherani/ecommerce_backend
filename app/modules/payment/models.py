@@ -33,3 +33,34 @@ class Payment(Base):
     refunded_at = Column(DateTime, nullable=True)
 
     order = relationship("Order", back_populates="payment")
+
+    events = relationship(
+        "PaymentEvent",
+        back_populates="payment",
+        cascade="all, delete-orphan"
+    )
+
+class PaymentEvent(Base):
+    __tablename__ = "payment_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    payment_id = Column(
+        Integer,
+        ForeignKey("payments.id"),
+        nullable=False
+    )
+
+    event_type = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    payment = relationship(
+        "Payment",
+        back_populates="events"
+    )

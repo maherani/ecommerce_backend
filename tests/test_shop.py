@@ -3,6 +3,7 @@ from app.modules.payment.models import Payment
 from app.modules.shipping.models import Shipping
 from app.modules.order.models import Order
 from app.modules.product.models import Product
+from app.modules.payment.models import Payment, PaymentEvent
 
 def test_products_list(client):
     """تست دریافت لیست محصولات"""
@@ -1629,3 +1630,192 @@ def test_idempotency_key_cannot_be_reused_for_another_order(
     assert second_payment.json()["detail"] == (
         "Idempotency key already used for another order"
     )
+def test_payment_events_are_persisted(client, auth_token):
+    """پرداخت و refund باید Event مربوط به خود را در دیتابیس ثبت کنند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers=headers
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers=headers
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers=headers
+    )
+
+    assert payment_res.status_code == 200
+
+    db = SessionLocal()
+    try:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .first()
+        )
+
+        assert payment is not None
+
+        events = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.payment_id == payment.id)
+            .order_by(PaymentEvent.id)
+            .all()
+        )
+
+        assert len(events) == 1
+        assert events[0].event_type == "payment_created"
+        assert events[0].status == "paid"
+    finally:
+        db.close()
+
+    refund_res = client.post(
+        f"/payment/{order_id}/refund",
+        headers=headers
+    )
+
+    assert refund_res.status_code == 200
+
+    db = SessionLocal()
+    try:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .first()
+        )
+
+        assert payment is not None
+
+        events = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.payment_id == payment.id)
+            .order_by(PaymentEvent.id)
+            .all()
+        )
+
+        assert len(events) == 2
+
+        assert events[0].event_type == "payment_created"
+        assert events[0].status == "paid"
+
+        assert events[1].event_type == "payment_refunded"
+        assert events[1].status == "refunded"
+    finally:
+        db.close()
+def test_idempotent_payment_does_not_create_duplicate_event(
+    client,
+    auth_token
+):
+    """درخواست تکراری idempotent نباید PaymentEvent جدید ایجاد کند."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    idempotency_key = "audit-idempotency-test-001"
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers=headers
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        headers=headers
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    first_payment = client.post(
+        "/payment/process",
+        json={
+            "order_id": order_id,
+            "idempotency_key": idempotency_key
+        },
+        headers=headers
+    )
+
+    assert first_payment.status_code == 200
+
+    first_transaction_id = first_payment.json()["transaction_id"]
+
+    second_payment = client.post(
+        "/payment/process",
+        json={
+            "order_id": order_id,
+            "idempotency_key": idempotency_key
+        },
+        headers=headers
+    )
+
+    assert second_payment.status_code == 200
+    assert second_payment.json()["transaction_id"] == first_transaction_id
+    assert second_payment.json()["message"] == "Payment already processed"
+
+    db = SessionLocal()
+    try:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .first()
+        )
+
+        assert payment is not None
+
+        events = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.payment_id == payment.id)
+            .all()
+        )
+
+        assert len(events) == 1
+        assert events[0].event_type == "payment_created"
+    finally:
+        db.close()
