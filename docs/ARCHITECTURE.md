@@ -115,6 +115,42 @@ created_at
 
 Audit events are stored separately from mutable Payment state. Replaying the same idempotent payment request returns the existing payment and does not create another audit event.
 
+### Step 34 — Rich Payment Audit Metadata
+
+```text
+PaymentEvent
+    |
+    +---- actor_user_id → users.id
+    |
+    +---- event_type
+    |
+    +---- status
+    |
+    +---- metadata (JSON)
+    |
+    +---- created_at
+```
+
+The authenticated user is stored in `actor_user_id` for payment and refund events. Structured JSON metadata captures contextual information such as order ID, payment amount, transaction ID, and refund timestamp.
+
+Payment event creation now follows this pattern:
+
+```text
+authenticated request
+        ↓
+state change
+        ↓
+create PaymentEvent
+        ├── actor_user_id
+        ├── event_type
+        ├── status
+        └── metadata
+        ↓
+commit
+```
+
+The actor foreign key is nullable for compatibility with non-user-generated events that may be introduced later.
+
 ## 4. Checkout Transaction
 
 ```text
@@ -141,7 +177,7 @@ Failed checkout rolls back the transaction.
 
 ## 5. Authentication / Authorization
 
-JWT authentication protects user-specific payment and refund operations. Ownership is checked at the Order query level before Payment state changes.
+JWT authentication protects user-specific payment and refund operations. Ownership is checked at the Order query level before Payment state changes. Audit events record the authenticated actor responsible for those changes.
 
 ## 6. Persistence and Migrations
 
@@ -155,9 +191,11 @@ cff58edd10a9_add_payments_table.py
 aea3438feb25_add_payment_idempotency_key.py
                 ↓
 e124ed32b079_add_payment_events_table.py
+                ↓
+2a408bf8badb_add_payment_audit_metadata.py
 ```
 
-Step 33 adds the `payment_events` table and its Payment foreign key/index.
+Step 34 adds `actor_user_id` with a foreign key to `users.id` and a JSON `metadata` column to `payment_events`.
 
 ## 7. Testing and CI
 
@@ -169,14 +207,16 @@ Latest verified local suite:
 
 CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
 
+Step 34 tests cover actor attribution and structured metadata for payment and refund audit events.
+
 ## 8. Current Status
 
 ```text
-Step 33 — Payment Audit History
+Step 34 — Rich Payment Audit Metadata
 ```
 
 Local implementation commit:
 
 ```text
-e5a47f0 feat: add payment audit history
+bee233b feat: enrich payment audit metadata
 ```
