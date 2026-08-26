@@ -1445,3 +1445,187 @@ def test_refund_without_payment_returns_404(client, auth_token):
 
     assert refund_res.status_code == 404
     assert refund_res.json()["detail"] == "Payment not found"
+
+def test_payment_idempotency_key_returns_existing_payment(
+    client,
+    auth_token
+):
+    """درخواست تکراری با همان idempotency key نباید Payment جدید بسازد."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+    idempotency_key = "test-idempotency-key-001"
+
+    first_payment = client.post(
+        "/payment/process",
+        json={
+            "order_id": order_id,
+            "idempotency_key": idempotency_key
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert first_payment.status_code == 200
+
+    first_data = first_payment.json()
+
+    db = SessionLocal()
+    try:
+        initial_count = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .count()
+        )
+    finally:
+        db.close()
+
+    second_payment = client.post(
+        "/payment/process",
+        json={
+            "order_id": order_id,
+            "idempotency_key": idempotency_key
+        },
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    assert second_payment.status_code == 200
+
+    second_data = second_payment.json()
+
+    assert second_data["transaction_id"] == first_data["transaction_id"]
+    assert second_data["status"] == "paid"
+    assert second_data["message"] == "Payment already processed"
+
+    db = SessionLocal()
+    try:
+        final_count = (
+            db.query(Payment)
+            .filter(Payment.order_id == order_id)
+            .count()
+        )
+    finally:
+        db.close()
+
+    assert final_count == initial_count
+def test_idempotency_key_cannot_be_reused_for_another_order(
+    client,
+    auth_token
+):
+    """یک idempotency key نباید برای سفارش دیگری استفاده شود."""
+
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 2),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    idempotency_key = "test-idempotency-key-reuse-001"
+
+    # سفارش اول
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers=headers
+    )
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890"
+        },
+        headers=headers
+    )
+    assert checkout_res.status_code == 201
+
+    first_order_id = checkout_res.json()["id"]
+
+    first_payment = client.post(
+        "/payment/process",
+        json={
+            "order_id": first_order_id,
+            "idempotency_key": idempotency_key
+        },
+        headers=headers
+    )
+    assert first_payment.status_code == 200
+
+    # سفارش دوم
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1
+        },
+        headers=headers
+    )
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "456 Second Street",
+            "city": "Tehran",
+            "postal_code": "9876543210"
+        },
+        headers=headers
+    )
+    assert checkout_res.status_code == 201
+
+    second_order_id = checkout_res.json()["id"]
+
+    second_payment = client.post(
+        "/payment/process",
+        json={
+            "order_id": second_order_id,
+            "idempotency_key": idempotency_key
+        },
+        headers=headers
+    )
+
+    assert second_payment.status_code == 409
+    assert second_payment.json()["detail"] == (
+        "Idempotency key already used for another order"
+    )

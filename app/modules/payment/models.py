@@ -21,6 +21,8 @@ class Payment(Base):
     status = Column(String, nullable=False, default="pending")
     transaction_id = Column(String, nullable=True, unique=True)
 
+    idempotency_key = Column(String, nullable=True, unique=True)
+
     created_at = Column(
         DateTime,
         nullable=False,

@@ -43,6 +43,26 @@ def process_payment(
             detail="Order already has a payment"
         )
 
+    if payment_data.idempotency_key:
+        existing_payment = db.query(models.Payment).filter(
+            models.Payment.idempotency_key == payment_data.idempotency_key
+        ).first()
+
+        if existing_payment:
+            if existing_payment.order_id != order.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Idempotency key already used for another order"
+                )
+
+            return schemas.PaymentResponse(
+                order_id=existing_payment.order_id,
+                status=existing_payment.status,
+                message="Payment already processed",
+                transaction_id=existing_payment.transaction_id
+            )
+
+
     transaction_id = f"TRX-{uuid.uuid4().hex[:8].upper()}"
 
     payment = models.Payment(
@@ -50,6 +70,7 @@ def process_payment(
         amount=order.total_price,
         status="paid",
         transaction_id=transaction_id,
+        idempotency_key=payment_data.idempotency_key,
         paid_at=datetime.now(timezone.utc)
     )
 
