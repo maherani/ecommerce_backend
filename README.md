@@ -8,14 +8,15 @@ Production-oriented e-commerce backend built with FastAPI, PostgreSQL, Redis, SQ
 Client / Frontend
        |
        v
-    FastAPI (web)
+    FastAPI
        |
        +---- User
        +---- Product / Category
        +---- Cart
        +---- Order / OrderItem
-       +---- Shipping (1:1)
-       +---- Payment (1:1)
+       |       +---- Shipping (1:1)
+       |       +---- Payment  (1:1)
+       |               +---- PaymentEvent (1:N)
        +---- Rate Limiting
        +---- Background Tasks
        |
@@ -67,6 +68,46 @@ Migration:
 aea3438feb25_add_payment_idempotency_key.py
 ```
 
+### Step 33 — Payment Audit History
+
+A dedicated `payment_events` table records important Payment state changes without overwriting the Payment record.
+
+The `PaymentEvent` entity stores:
+
+```text
+payment_id
+event_type
+status
+created_at
+```
+
+Current events:
+
+```text
+payment_created
+payment_refunded
+```
+
+Payment flow:
+
+```text
+Payment created
+     ↓
+payment_created event
+
+Payment refunded
+     ↓
+payment_refunded event
+```
+
+Duplicate idempotent requests do not create duplicate audit events.
+
+Migration:
+
+```text
+e124ed32b079_add_payment_events_table.py
+```
+
 ## Testing
 
 Run the full suite:
@@ -78,10 +119,10 @@ docker compose exec web pytest -q
 Latest verified result:
 
 ```text
-35 passed
+37 passed
 ```
 
-Coverage includes payment persistence, duplicate-payment protection, refunds, refund authorization, idempotency-key replay handling, and cross-order idempotency-key protection.
+Coverage includes payment persistence, duplicate-payment protection, refunds, refund authorization, idempotency replay handling, cross-order key protection, PaymentEvent persistence, and duplicate-event protection.
 
 ## Current Development Progress
 
@@ -114,6 +155,7 @@ Step 25 — Shipping & Delivery Management        ✅
 Step 30 — Persistent Payment Records            ✅
 Step 31 — Payment Refund Flow                   ✅
 Step 32 — Payment Idempotency                   ✅
+Step 33 — Payment Audit History                 ✅
 ```
 
 ## Database Migration Chain
@@ -124,6 +166,8 @@ Step 32 — Payment Idempotency                   ✅
 cff58edd10a9_add_payments_table.py
                 ↓
 aea3438feb25_add_payment_idempotency_key.py
+                ↓
+e124ed32b079_add_payment_events_table.py
 ```
 
 ## Development Workflow
@@ -137,16 +181,16 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest implemented milestone:
 
 ```text
-Step 32 — Payment Idempotency
+Step 33 — Payment Audit History
 ```
 
 Latest verified local test result:
 
 ```text
-35 passed
+37 passed
 ```
 
-Idempotency is currently implemented at the domain/database level; real payment-provider integration remains future work.
+Payment audit history is currently implemented at the domain/database level; real payment-provider integration remains future work.
 
 ## Documentation
 
