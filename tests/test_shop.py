@@ -1698,6 +1698,20 @@ def test_payment_events_are_persisted(client, auth_token):
         assert len(events) == 1
         assert events[0].event_type == "payment_created"
         assert events[0].status == "paid"
+
+        assert events[0].actor_user_id is not None
+        assert events[0].actor_user_id > 0
+
+        assert events[0].event_metadata is not None
+        assert events[0].event_metadata["order_id"] == order_id
+        assert (
+            events[0].event_metadata["amount"]
+            == checkout_res.json()["total_price"]
+        )
+        assert (
+            events[0].event_metadata["transaction_id"]
+            == payment_res.json()["transaction_id"]
+        )
     finally:
         db.close()
 
@@ -1732,6 +1746,16 @@ def test_payment_events_are_persisted(client, auth_token):
 
         assert events[1].event_type == "payment_refunded"
         assert events[1].status == "refunded"
+
+        assert events[1].actor_user_id == events[0].actor_user_id
+
+        assert events[1].event_metadata is not None
+        assert events[1].event_metadata["order_id"] == order_id
+        assert (
+            events[1].event_metadata["transaction_id"]
+            == payment_res.json()["transaction_id"]
+        )
+        assert events[1].event_metadata["refunded_at"] is not None
     finally:
         db.close()
 def test_idempotent_payment_does_not_create_duplicate_event(

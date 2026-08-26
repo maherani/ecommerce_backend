@@ -75,12 +75,18 @@ def process_payment(
     )
 
     order.status = "paid"
+
     payment_event = models.PaymentEvent(
         payment=payment,
+        actor_user_id=current_user.id,
         event_type="payment_created",
-        status=payment.status
+        status=payment.status,
+        event_metadata={
+            "order_id": order.id,
+            "amount": order.total_price,
+            "transaction_id": payment.transaction_id,
+        }
     )
-
     db.add(payment_event)
     db.commit()
     db.refresh(payment)
@@ -135,12 +141,19 @@ def refund_payment(
     payment.status = "refunded"
     payment.refunded_at = datetime.now(timezone.utc)
 
-    refund_event = models.PaymentEvent(
-       payment=payment,
-       event_type="payment_refunded",
-       status=payment.status
-    )
 
+    refund_event = models.PaymentEvent(
+      payment=payment,
+      actor_user_id=current_user.id,
+      event_type="payment_refunded",
+      status=payment.status,
+      event_metadata={
+          "order_id": order.id,
+          "transaction_id": payment.transaction_id,
+          "refunded_at": payment.refunded_at.isoformat()
+          if payment.refunded_at else None,
+     }
+   )
     db.add(refund_event)
 
     db.commit()

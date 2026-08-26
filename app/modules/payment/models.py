@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, Float, String, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
@@ -50,9 +50,19 @@ class PaymentEvent(Base):
         ForeignKey("payments.id"),
         nullable=False
     )
-
+    actor_user_id = Column(
+       Integer,
+       ForeignKey("users.id"),
+       nullable=True
+    )
     event_type = Column(String, nullable=False)
     status = Column(String, nullable=False)
+
+    event_metadata = Column(
+       "metadata",
+       JSON,
+       nullable=True
+    )
 
     created_at = Column(
         DateTime,
