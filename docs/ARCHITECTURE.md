@@ -12,6 +12,7 @@ FastAPI
   ├── Order / OrderItem
   │     ├── Shipping (1:1)
   │     └── Payment  (1:1)
+  │             └── PaymentEvent (1:N)
   ├── Rate Limiting
   └── Background Tasks
 
@@ -31,7 +32,11 @@ User
           +---- Shipping   (1:1)
           |
           +---- Payment    (1:1)
+                     |
+                     +----< PaymentEvent
 ```
+
+Each Payment can have multiple immutable PaymentEvent records representing significant state changes.
 
 ## 3. Payment Processing
 
@@ -85,13 +90,30 @@ lookup existing Payment by key
 create Payment with key
 ```
 
-The `payments.idempotency_key` column is nullable for backward compatibility and has a unique constraint:
+The `payments.idempotency_key` column is nullable for backward compatibility and has the unique constraint `uq_payments_idempotency_key`.
+
+### Step 33 — Payment Audit History
 
 ```text
-uq_payments_idempotency_key
+Payment created
+     ↓
+PaymentEvent(payment_created)
+
+Payment refunded
+     ↓
+PaymentEvent(payment_refunded)
 ```
 
-This provides database-level protection against duplicate key usage in addition to the application-level lookup.
+`PaymentEvent` fields:
+
+```text
+payment_id
+event_type
+status
+created_at
+```
+
+Audit events are stored separately from mutable Payment state. Replaying the same idempotent payment request returns the existing payment and does not create another audit event.
 
 ## 4. Checkout Transaction
 
@@ -131,16 +153,18 @@ Alembic is the authoritative schema-management mechanism.
 cff58edd10a9_add_payments_table.py
                 ↓
 aea3438feb25_add_payment_idempotency_key.py
+                ↓
+e124ed32b079_add_payment_events_table.py
 ```
 
-Step 32 adds only the `idempotency_key` column and its unique constraint; no new Payment table is introduced.
+Step 33 adds the `payment_events` table and its Payment foreign key/index.
 
 ## 7. Testing and CI
 
 Latest verified local suite:
 
 ```text
-35 passed
+37 passed
 ```
 
 CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
@@ -148,11 +172,11 @@ CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`
 ## 8. Current Status
 
 ```text
-Step 32 — Payment Idempotency
+Step 33 — Payment Audit History
 ```
 
 Local implementation commit:
 
 ```text
-7035c30 feat: add payment idempotency
+e5a47f0 feat: add payment audit history
 ```
