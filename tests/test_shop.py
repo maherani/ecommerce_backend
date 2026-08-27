@@ -9,6 +9,7 @@ from app.modules.product.models import Product
 from app.modules.payment.models import Payment, PaymentEvent
 from app.core.config import settings
 from app.modules.payment.schemas import PaymentWebhookRequest
+from unittest.mock import patch
 
 def test_products_list(client):
     """تست دریافت لیست محصولات"""
@@ -1915,11 +1916,16 @@ def test_payment_webhook_signature_validation(client, auth_token):
         hashlib.sha256,
     ).hexdigest()
 
-    valid_response = client.post(
-        "/payment/webhook",
-        json=webhook_payload,
-        params={"signature": valid_signature},
-    )
+    with patch(
+        "app.modules.payment.router.process_payment_webhook.delay"
+    ) as mock_task:
+        valid_response = client.post(
+            "/payment/webhook",
+            json=webhook_payload,
+            params={"signature": valid_signature},
+        )
+
+        mock_task.assert_called_once_with("webhook-test-001")
 
     assert valid_response.status_code == 200
 
@@ -1949,14 +1955,20 @@ def test_payment_webhook_rejects_invalid_payment_and_status(client):
         hashlib.sha256,
     ).hexdigest()
 
-    not_found_response = client.post(
-        "/payment/webhook",
-        json=unknown_payload,
-        params={"signature": valid_signature},
-    )
+    with patch(
+        "app.modules.payment.router.process_payment_webhook.delay"
+    ) as mock_task:
+        not_found_response = client.post(
+            "/payment/webhook",
+            json=unknown_payload,
+            params={"signature": valid_signature},
+        )
+
+        mock_task.assert_not_called()
 
     assert not_found_response.status_code == 404
     assert not_found_response.json()["detail"] == "Payment not found"
+
 def test_payment_webhook_rejects_unsupported_status(
     client,
     auth_token
@@ -2026,12 +2038,18 @@ def test_payment_webhook_rejects_unsupported_status(
         hashlib.sha256,
     ).hexdigest()
 
-    response = client.post(
-        "/payment/webhook",
-        json=webhook_payload,
-        params={"signature": valid_signature},
-    )
+    with patch(
+        "app.modules.payment.router.process_payment_webhook.delay"
+    ) as mock_task:
+        response = client.post(
+            "/payment/webhook",
+            json=webhook_payload,
+            params={"signature": valid_signature},
+        )
 
+        mock_task.assert_called_once_with(
+            "webhook-invalid-status-001"
+        )
     assert response.status_code == 400
     assert response.json()["detail"] == "Unsupported payment status"
 def test_payment_webhook_is_idempotent(
@@ -2103,23 +2121,30 @@ def test_payment_webhook_is_idempotent(
         hashlib.sha256,
     ).hexdigest()
 
-    first_response = client.post(
-        "/payment/webhook",
-        json=webhook_payload,
-        params={"signature": signature},
-    )
+    with patch(
+        "app.modules.payment.router.process_payment_webhook.delay"
+    ) as mock_task:
+        first_response = client.post(
+            "/payment/webhook",
+            json=webhook_payload,
+            params={"signature": signature},
+        )
 
-    assert first_response.status_code == 200
+        assert first_response.status_code == 200
 
-    second_response = client.post(
-        "/payment/webhook",
-        json=webhook_payload,
-        params={"signature": signature},
-    )
+        second_response = client.post(
+            "/payment/webhook",
+            json=webhook_payload,
+            params={"signature": signature},
+        )
 
-    assert second_response.status_code == 200
-    assert second_response.json()["message"] == "Webhook already processed"
-    assert second_response.json()["transaction_id"] == transaction_id
+        assert second_response.status_code == 200
+        assert second_response.json()["message"] == "Webhook already processed"
+        assert second_response.json()["transaction_id"] == transaction_id
+
+        mock_task.assert_called_once_with(
+            "webhook-idempotency-001"
+        )
 
     db = SessionLocal()
     try:
@@ -2139,5 +2164,232 @@ def test_payment_webhook_is_idempotent(
         )
 
         assert len(events) == 1
+    finally:
+        db.close()
+def test_payment_webhook_retry_exhaustion(client, auth_token):
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1,
+        },
+        headers=headers,
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890",
+        },
+        headers=headers,
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers=headers,
+    )
+
+    assert payment_res.status_code == 200
+
+    transaction_id = payment_res.json()["transaction_id"]
+
+    webhook_payload = {
+        "transaction_id": transaction_id,
+        "status": "paid",
+        "event_id": "webhook-retry-exhaustion-001",
+    }
+
+    payload_bytes = (
+        PaymentWebhookRequest(**webhook_payload)
+        .model_dump_json()
+        .encode()
+    )
+
+    signature = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    with patch(
+        "app.modules.payment.router.process_payment_webhook.delay"
+    ) as mock_task:
+        response = client.post(
+            "/payment/webhook",
+            json=webhook_payload,
+            params={"signature": signature},
+        )
+
+        assert response.status_code == 200
+        mock_task.assert_called_once_with(
+            "webhook-retry-exhaustion-001"
+        )
+
+    db = SessionLocal()
+
+    try:
+        event = (
+            db.query(PaymentEvent)
+            .filter(
+                PaymentEvent.event_id
+                == "webhook-retry-exhaustion-001"
+            )
+            .first()
+        )
+
+        assert event is not None
+        assert event.event_metadata is not None
+        assert (
+            event.event_metadata["processing_status"]
+            == "processing"
+        )
+    finally:
+        db.close()
+
+def test_payment_webhook_records_failed_after_retries(
+    client,
+    auth_token
+):
+    products = client.get("/products/").json()
+
+    product = next(
+        (p for p in products if p["stock_quantity"] >= 1),
+        None
+    )
+
+    if not product:
+        return
+
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    cart_res = client.post(
+        "/cart/",
+        json={
+            "product_id": product["id"],
+            "quantity": 1,
+        },
+        headers=headers,
+    )
+
+    assert cart_res.status_code == 201
+
+    checkout_res = client.post(
+        "/orders/checkout",
+        json={
+            "address": "123 Main Street",
+            "city": "Tehran",
+            "postal_code": "1234567890",
+        },
+        headers=headers,
+    )
+
+    assert checkout_res.status_code == 201
+
+    order_id = checkout_res.json()["id"]
+
+    payment_res = client.post(
+        "/payment/process",
+        json={"order_id": order_id},
+        headers=headers,
+    )
+
+    assert payment_res.status_code == 200
+
+    transaction_id = payment_res.json()["transaction_id"]
+
+    webhook_payload = {
+        "transaction_id": transaction_id,
+        "status": "paid",
+        "event_id": "webhook-failed-after-retries-001",
+    }
+
+    payload_bytes = (
+        PaymentWebhookRequest(**webhook_payload)
+        .model_dump_json()
+        .encode()
+    )
+
+    signature = hmac.new(
+        settings.PAYMENT_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    with patch(
+        "app.modules.payment.router.process_payment_webhook.delay"
+    ):
+        response = client.post(
+            "/payment/webhook",
+            json=webhook_payload,
+            params={"signature": signature},
+        )
+
+    assert response.status_code == 200
+
+    from sqlalchemy.orm import Session
+
+    original_commit = Session.commit
+    attempts = {"count": 0}
+
+    def failing_commit(self):
+        attempts["count"] += 1
+
+        if attempts["count"] <= 3:
+            raise ConnectionError("simulated transient database failure")
+
+        return original_commit(self)
+
+    with patch.object(
+        Session,
+        "commit",
+        new=failing_commit
+    ):
+        from app.tasks.payment_tasks import process_payment_webhook
+
+        process_payment_webhook.apply(
+            args=["webhook-failed-after-retries-001"],
+            throw=False,
+        )
+
+    db = SessionLocal()
+
+    try:
+        event = (
+            db.query(PaymentEvent)
+            .filter(
+                PaymentEvent.event_id
+                == "webhook-failed-after-retries-001"
+            )
+            .first()
+        )
+
+        assert event is not None
+        assert event.event_metadata is not None
+        assert (
+            event.event_metadata["processing_status"]
+            == "failed_after_retries"
+        )
+        assert attempts["count"] >= 4
     finally:
         db.close()

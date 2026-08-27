@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 import hmac
+
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +13,7 @@ from app.modules.payment import models, schemas
 from app.modules.user.models import User
 from app.modules.user.router import get_current_user
 from app.core.config import settings
+from app.tasks.payment_tasks import process_payment_webhook
 
 router = APIRouter(prefix="/payment", tags=["Payment"])
 
@@ -23,6 +25,7 @@ def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     ).hexdigest()
 
     return hmac.compare_digest(expected_signature, signature)
+
 @router.post("/webhook", response_model=schemas.PaymentResponse)
 async def payment_webhook(
     payment_data: schemas.PaymentWebhookRequest,
@@ -36,6 +39,7 @@ async def payment_webhook(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid webhook signature"
         )
+
     existing_event = db.query(models.PaymentEvent).filter(
         models.PaymentEvent.event_id == payment_data.event_id
     ).first()
@@ -58,58 +62,37 @@ async def payment_webhook(
             detail="Payment not found"
         )
 
-    if payment_data.status == "paid":
-        payment.status = "paid"
-
-        if not payment.paid_at:
-            payment.paid_at = datetime.now(timezone.utc)
-
-    elif payment_data.status == "refunded":
-        payment.status = "refunded"
-
-        if not payment.refunded_at:
-            payment.refunded_at = datetime.now(timezone.utc)
-
-    else:
+    if payment_data.status not in {"paid", "refunded"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported payment status"
         )
 
-    order = db.query(Order).filter(
-        Order.id == payment.order_id
-    ).first()
-
-    if order:
-        if payment_data.status == "paid":
-            order.status = "paid"
-
-        elif payment_data.status == "refunded":
-            order.status = "cancelled"
-
     payment_event = models.PaymentEvent(
         payment=payment,
         actor_user_id=None,
         event_id=payment_data.event_id,
-        event_type=f"webhook_{payment_data.status}",
+        event_type="webhook_received",
         status=payment.status,
         event_metadata={
             "event_id": payment_data.event_id,
-            "transaction_id": payment.transaction_id,
+            "transaction_id": payment_data.transaction_id,
+            "webhook_status": payment_data.status,
+            "source": "payment_webhook",
         }
     )
 
     db.add(payment_event)
     db.commit()
-    db.refresh(payment)
+
+    process_payment_webhook.delay(payment_data.event_id)
 
     return schemas.PaymentResponse(
         order_id=payment.order_id,
         status=payment.status,
-        message="Payment webhook processed successfully",
+        message="Payment webhook queued for processing",
         transaction_id=payment.transaction_id
     )
-
 @router.post("/process", response_model=schemas.PaymentResponse)
 def process_payment(
    payment_data: schemas.PaymentRequest,

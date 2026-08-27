@@ -33,6 +33,7 @@ Steps 1–25 completed, followed by:
 - Step 33 — Payment audit history
 - Step 34 — Rich payment audit metadata
 - Step 35 — Payment webhooks
+- Step 36 — Webhook Delivery & Retry Infrastructure
 
 ## Implemented Features
 
@@ -169,13 +170,66 @@ Migration:
 ```text
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
+### Webhook Delivery & Retry Infrastructure — Step 36
+
+Webhook processing is moved to Celery and Redis.
+
+Flow:
+
+```text
+Webhook request
+      ↓
+HMAC validation
+      ↓
+event_id duplicate check
+      ↓
+persist webhook event
+      ↓
+Celery queue
+      ↓
+process_payment_webhook
+      ↓
+update Payment / Order
+      ↓
+commit
+
+Celery task:
+
+app.tasks.payment_tasks.process_payment_webhook
+
+Redis configuration:
+
+redis://redis:6379/0
+
+Retry policy:
+
+Retries are handled explicitly by the task.
+Only transient ConnectionError failures are retried.
+Maximum retries: 3.
+Retry uses backoff.
+Permanent domain errors are not retried as transient errors.
+
+Webhook processing status is recorded in PaymentEvent.metadata:
+
+processing
+processed
+failed_after_retries
+
+Worker verification confirmed the task is registered, receives jobs from Redis, processes webhook events, and performs the configured retry cycle for transient failures.
 
 ## Testing
 
 Latest full-suite verification:
 
 ```text
-41 passed
+43 passed
+- Celery webhook task registration
+- Redis-backed asynchronous dispatch
+- real worker execution
+- retry handling
+- maximum retry enforcement
+- processing-state tracking
+- retry-exhaustion tracking
 ```
 
 Command:
@@ -204,13 +258,17 @@ e3e6a6bd5e42_add_payment_webhook_event_id.py
 
 ## Repository Status
 
-Local Step 35 implementation commit:
+Latest local implementation:
 
 ```text
-1a38376 feat: add payment webhooks
+Step 36 — Webhook Delivery & Retry Infrastructure
+
+Local verification:
+
+43 passed
+git diff --check → clean
 ```
 
-The implementation was locally verified with 41 passing tests and a clean diff before documentation synchronization.
 
 ## Current Known Good State
 
@@ -220,8 +278,11 @@ Step 31 — Payment Refund Flow             COMPLETED
 Step 32 — Payment Idempotency             COMPLETED
 Step 33 — Payment Audit History           COMPLETED
 Step 34 — Rich Payment Audit Metadata     COMPLETED
-Step 35 — Payment Webhooks                IMPLEMENTED
+Step 35 — Payment Webhooks                COMPLETED
 Tests                                     41 passed
+Alembic head                              e3e6a6bd5e42
+Step 36 — Webhook Delivery & Retry        IMPLEMENTED
+Tests                                     43 passed
 Alembic head                              e3e6a6bd5e42
 ```
 
@@ -235,19 +296,20 @@ Alembic head                              e3e6a6bd5e42
 - Duplicate idempotent requests must not create duplicate audit events.
 - Audit actors and structured metadata make payment history operationally traceable.
 - Webhooks require signature verification and their own idempotency mechanism.
+- Asynchronous webhook processing should be separated from the HTTP request path.
+- Only transient infrastructure failures should trigger automatic retries.
+- Retry exhaustion should leave an operationally visible state.
 - Payment and refund remain mock provider operations.
 
 ## Pending Work
 
-- Synchronize local `main` with the latest GitHub documentation commits.
-- Push the Step 35 implementation after synchronization.
-- Verify GitHub Actions is green for the final Step 35 remote state.
+- Commit and push Step 36 implementation plus updated documentation.
+- Verify GitHub Actions is green for the final Step 36 remote state.
 
 ## Future Enhancements
 
 - Real payment gateway integration
-- Provider webhook delivery/retry infrastructure
-- Richer payment audit event types and correlation IDs
+- Provider webhook delivery/retry infrastructure beyond the local Celery simulation- Richer payment audit event types and correlation IDs
 - Structured logging
 - Metrics and monitoring
 - Distributed tracing

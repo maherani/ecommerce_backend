@@ -5,7 +5,10 @@ celery_app = Celery(
     "ecommerce_worker",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.email_tasks"]  # <--- این خط باید اضافه شود
+    include=[
+        "app.tasks.email_tasks",
+        "app.tasks.payment_tasks",
+    ]
 )
 
 celery_app.conf.update(

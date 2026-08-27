@@ -15,9 +15,10 @@ FastAPI
   │             └── PaymentEvent (1:N)
   ├── Rate Limiting
   └── Background Tasks
+      └── Celery Worker
 
 PostgreSQL ← primary database
-Redis      ← cache / rate limiting / Celery
+Redis      ← cache / rate limiting / Celery broker/backend
 ```
 
 ## 2. Domain Relationships
@@ -127,6 +128,9 @@ The authenticated user is stored as the actor for user-generated payment/refund 
 ### Step 35 — Payment Webhooks
 
 ```text
+### Step 35 — Payment Webhooks
+
+```text
 External Provider
        ↓
 POST /payment/webhook
@@ -142,11 +146,9 @@ lookup Payment by transaction_id
        ↓
 validate webhook status
        ↓
-update Payment / Order
+persist webhook PaymentEvent
        ↓
-create PaymentEvent
-       ↓
-commit
+queue Celery task
 ```
 
 Webhook payload:
@@ -171,6 +173,70 @@ refunded → Payment.status=refunded, Order.status=cancelled
 ```
 
 Webhook audit records contain `event_id` and identify their source as `payment_webhook`. A unique `event_id` prevents duplicate webhook processing.
+
+The HTTP request validates and persists the webhook event. Payment and Order state changes are handled asynchronously by the Step 36 Celery worker.
+
+### Step 36 — Webhook Delivery & Retry Infrastructure
+
+Webhook HTTP request
+       ↓
+HMAC validation
+       ↓
+event_id duplicate check
+       ↓
+Payment lookup
+       ↓
+status validation
+       ↓
+persist PaymentEvent
+       ↓
+Celery / Redis queue
+       ↓
+process_payment_webhook
+       ↓
+load webhook event
+       ↓
+process Payment / Order
+       ↓
+commit
+
+Celery task:
+
+app.tasks.payment_tasks.process_payment_webhook
+
+Redis:
+
+redis://redis:6379/0
+
+Retry policy:
+
+ConnectionError
+      ↓
+retry #1
+      ↓
+retry #2
+      ↓
+retry #3
+      ↓
+failed_after_retries
+
+Only transient ConnectionError failures are retried.
+
+Permanent domain errors such as:
+
+missing webhook event
+missing payment
+unsupported status
+
+are not automatically retried.
+
+Processing state is stored in PaymentEvent.metadata:
+
+processing
+processed
+failed_after_retries
+
+The webhook event_id remains unique, preventing duplicate delivery from queueing duplicate processing.
 
 ## 4. Checkout Transaction
 
@@ -225,19 +291,27 @@ Step 35 adds a unique `event_id` to `payment_events` so provider webhook deliver
 Latest verified local suite:
 
 ```text
-41 passed
+43 passed
 ```
 
 Coverage includes valid/invalid webhook signatures, unknown payments, unsupported statuses, successful webhook handling, and duplicate webhook protection.
+Celery task registration
+Redis-backed dispatch
+real worker execution
+transient retry handling
+maximum retry count
+processing state tracking
+retry exhaustion tracking
 
 CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
 
 ## 8. Current Status
 
 ```text
-Step 35 — Payment Webhooks
-```
+Step 36 — Webhook Delivery & Retry Infrastructure
 
+```
+43 passed
 Local implementation commit:
 
 ```text

@@ -134,6 +134,56 @@ Migration:
 ```text
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
+### Step 36 — Webhook Delivery & Retry Infrastructure
+
+Webhook processing is asynchronous and is handled by Celery using Redis as the broker/backend.
+
+Processing flow:
+
+```text
+External Provider
+       |
+       v
+POST /payment/webhook
+       |
+       v
+Validate HMAC + event_id
+       |
+       v
+Persist webhook event
+       |
+       v
+Celery task
+       |
+       v
+Process Payment / Order
+       |
+       v
+Commit
+
+Retry behavior:
+
+Transient ConnectionError failures are retried.
+Maximum retries: 3.
+Retry uses backoff.
+Permanent domain errors such as missing webhook events, missing payments, or unsupported statuses are not treated as transient retry conditions.
+
+Webhook processing status is stored in PaymentEvent.metadata:
+
+processing
+processed
+failed_after_retries
+
+Celery task:
+
+app.tasks.payment_tasks.process_payment_webhook
+
+Redis broker/backend:
+
+redis://redis:6379/0
+
+The test suite verifies asynchronous dispatch, retry handling, and retry exhaustion tracking.
+
 
 ## Testing
 
@@ -146,7 +196,7 @@ docker compose exec web pytest -q
 Latest verified result:
 
 ```text
-41 passed
+43 passed
 ```
 
 Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, and duplicate webhook protection.
@@ -185,6 +235,7 @@ Step 32 — Payment Idempotency                   ✅
 Step 33 — Payment Audit History                 ✅
 Step 34 — Rich Payment Audit Metadata           ✅
 Step 35 — Payment Webhooks                      ✅
+Step 36 — Webhook Delivery & Retry Infrastructure ✅
 ```
 
 ## Database Migration Chain
@@ -214,16 +265,16 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest implemented milestone:
 
 ```text
-Step 35 — Payment Webhooks
+Step 36 — Webhook Delivery & Retry Infrastructure
 ```
 
 Latest verified local test result:
 
 ```text
-41 passed
+43 passed
 ```
 
-Payment webhooks are currently a domain/database simulation of a provider callback; real external payment gateway integration remains future work.
+Payment provider integration remains simulated; Step 36 adds asynchronous webhook processing, retry handling, and operational state tracking around the mock payment domain.
 
 ## Documentation
 
