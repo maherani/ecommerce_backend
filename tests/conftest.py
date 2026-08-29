@@ -8,7 +8,10 @@ import uuid
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    with TestClient(
+        app,
+        raise_server_exceptions=False,
+    ) as c:
         yield c
 
 @pytest.fixture(autouse=True)

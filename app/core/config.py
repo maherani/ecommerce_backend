@@ -2,7 +2,6 @@
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
     # PostgreSQL configuration.
     POSTGRES_USER: str
@@ -17,6 +16,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     # Payment webhook security.
     PAYMENT_WEBHOOK_SECRET: str
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
     # Build the SQLAlchemy connection URL from environment variables.
     @property
     def DATABASE_URL(self) -> str:
@@ -40,3 +40,12 @@ class Settings(BaseSettings):
 
 # Create one shared settings instance for the whole application.
 settings = Settings()
+
+
+def validate_security_settings() -> None:
+    """Validate security-sensitive settings before production startup."""
+    if not settings.SECRET_KEY.strip():
+        raise ValueError("SECRET_KEY must not be empty")
+
+    if not settings.PAYMENT_WEBHOOK_SECRET.strip():
+        raise ValueError("PAYMENT_WEBHOOK_SECRET must not be empty")

@@ -53,8 +53,12 @@ def create_access_token(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
-    # Add expiration time to the JWT payload.
-    to_encode.update({"exp": expire})
+    # Add standard JWT claims.
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "access",
+    })
 
     # Sign the token using the secret and algorithm from configuration.
     encoded_jwt = jwt.encode(

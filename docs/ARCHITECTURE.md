@@ -2,7 +2,7 @@
 
 ## 1. System Overview
 
-```text
+
 Client
   ↓
 FastAPI
@@ -19,11 +19,9 @@ FastAPI
 
 PostgreSQL ← primary database
 Redis      ← cache / rate limiting / Celery broker/backend
-```
+
 
 ## 2. Domain Relationships
-
-```text
 User
  |
  +----< Order
@@ -35,15 +33,13 @@ User
           +---- Payment    (1:1)
                      |
                      +----< PaymentEvent
-```
+
 
 Each Payment can have multiple immutable PaymentEvent records representing significant state changes.
 
 ## 3. Payment Processing
 
 ### Step 30
-
-```text
 pending Order
    ↓
 POST /payment/process
@@ -55,11 +51,11 @@ create Payment(status=paid)
 transaction_id + paid_at
    ↓
 Order.status = paid
-```
+
 
 ### Step 31 — Refund
 
-```text
+
 paid Order
    ↓
 POST /payment/{order_id}/refund
@@ -69,13 +65,12 @@ validate ownership + paid state
 Payment.status = refunded
    ↓
 refunded_at
-```
+
 
 Refund is currently a mock domain operation.
 
 ### Step 32 — Idempotency
 
-```text
 POST /payment/process
         |
         +---- optional idempotency_key
@@ -89,13 +84,10 @@ lookup existing Payment by key
         |
         v
 create Payment with key
-```
-
 The `payments.idempotency_key` column is nullable for backward compatibility and has the unique constraint `uq_payments_idempotency_key`.
 
 ### Step 33 — Payment Audit History
 
-```text
 Payment created
      ↓
 PaymentEvent(payment_created)
@@ -103,13 +95,10 @@ PaymentEvent(payment_created)
 Payment refunded
      ↓
 PaymentEvent(payment_refunded)
-```
 
 `PaymentEvent` stores the immutable audit record separately from mutable Payment state.
 
 ### Step 34 — Rich Payment Audit Metadata
-
-```text
 PaymentEvent
     |
     +---- actor_user_id → users.id
@@ -121,16 +110,10 @@ PaymentEvent
     +---- metadata (JSON)
     |
     +---- created_at
-```
 
 The authenticated user is stored as the actor for user-generated payment/refund events. Structured JSON metadata records contextual information such as order ID, amount, transaction ID, and refund timestamp.
 
 ### Step 35 — Payment Webhooks
-
-```text
-### Step 35 — Payment Webhooks
-
-```text
 External Provider
        ↓
 POST /payment/webhook
@@ -149,15 +132,12 @@ validate webhook status
 persist webhook PaymentEvent
        ↓
 queue Celery task
-```
 
 Webhook payload:
 
-```text
 transaction_id
 status
 event_id
-```
 
 Security:
 
@@ -167,10 +147,8 @@ Security:
 
 Supported state changes:
 
-```text
 paid     → Payment.status=paid, Order.status=paid
 refunded → Payment.status=refunded, Order.status=cancelled
-```
 
 Webhook audit records contain `event_id` and identify their source as `payment_webhook`. A unique `event_id` prevents duplicate webhook processing.
 
@@ -238,9 +216,52 @@ failed_after_retries
 
 The webhook event_id remains unique, preventing duplicate delivery from queueing duplicate processing.
 
-## 4. Checkout Transaction
+### Step 37 — Security & API Hardening
+Client
+  ↓
+FastAPI
+  ↓
+Security Middleware
+  ├── Security Headers
+  └── CORS restrictions
+  ↓
+Authentication
+  ├── JWT signature validation
+  ├── exp validation
+  └── type=access validation
+  ↓
+Application routes
+Security controls:
 
-```text
+JWT
+  ├── exp
+  ├── iat
+  └── type=access
+
+Password
+  └── minimum length = 8
+
+HTTP headers
+  ├── X-Content-Type-Options
+  ├── X-Frame-Options
+  ├── Referrer-Policy
+  └── Permissions-Policy
+
+CORS
+  ├── configured origins
+  ├── restricted methods
+  └── restricted headers
+
+Security-sensitive configuration is validated during startup:
+
+SECRET_KEY
+PAYMENT_WEBHOOK_SECRET
+
+Unhandled exceptions are converted to a generic HTTP 500 response without exposing internal exception details.
+
+Step 37 adds no database migration; it hardens application security and request handling around the existing schema.
+
+## 4. Checkout Transaction
 Cart
  ↓
 Lock Product rows
@@ -258,8 +279,6 @@ Create Shipping
 Clear Cart
  ↓
 Commit
-```
-
 Failed checkout rolls back the transaction.
 
 ## 5. Authentication / Authorization
@@ -270,7 +289,6 @@ JWT authentication protects user-specific payment and refund operations. Ownersh
 
 Alembic is the authoritative schema-management mechanism.
 
-```text
 40f98fd888bb_add_shipping_table.py
                 ↓
 cff58edd10a9_add_payments_table.py
@@ -282,17 +300,13 @@ e124ed32b079_add_payment_events_table.py
 2a408bf8badb_add_payment_audit_metadata.py
                 ↓
 e3e6a6bd5e42_add_payment_webhook_event_id.py
-```
 
 Step 35 adds a unique `event_id` to `payment_events` so provider webhook delivery can be handled idempotently.
 
 ## 7. Testing and CI
 
 Latest verified local suite:
-
-```text
 43 passed
-```
 
 Coverage includes valid/invalid webhook signatures, unknown payments, unsupported statuses, successful webhook handling, and duplicate webhook protection.
 Celery task registration
@@ -306,14 +320,9 @@ retry exhaustion tracking
 CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
 
 ## 8. Current Status
-
-```text
 Step 36 — Webhook Delivery & Retry Infrastructure
 
-```
 43 passed
 Local implementation commit:
 
-```text
 1a38376 feat: add payment webhooks
-```

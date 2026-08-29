@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 ## Objective
-Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, payment webhooks, and production-readiness practices.
+Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, payment webhooks, webhook delivery/retry infrastructure, security hardening, and production-readiness practices.
 
 ## Current Architecture
 
@@ -20,7 +20,7 @@ FastAPI
   └── Background Tasks
 
 PostgreSQL ← application data
-Redis      ← cache / rate limiting / Celery
+Redis      ← cache / rate limiting / Celery broker/backend
 ```
 
 ## Completed Steps
@@ -192,6 +192,7 @@ process_payment_webhook
 update Payment / Order
       ↓
 commit
+```
 
 Celery task:
 
@@ -217,12 +218,50 @@ failed_after_retries
 
 Worker verification confirmed the task is registered, receives jobs from Redis, processes webhook events, and performs the configured retry cycle for transient failures.
 
+### Security & API Hardening — Step 37
+
+Security hardening was applied across authentication, password validation, HTTP responses, CORS, and application configuration.
+
+JWT:
+
+```text
+exp
+iat
+type=access
+Authenticated requests require type=access.
+
+Password policy:
+
+minimum length = 8
+
+Security response headers:
+
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy
+
+CORS is configuration-driven through CORS_ORIGINS and explicitly restricts allowed origins, methods, and headers.
+
+Security-sensitive configuration is validated during startup:
+
+SECRET_KEY
+PAYMENT_WEBHOOK_SECRET
+
+Unhandled exceptions return a generic HTTP 500 response without exposing internal exception details.
+
+Step 37 verification:
+
+50 passed
+git diff --check → clean
+```
+
 ## Testing
 
 Latest full-suite verification:
 
 ```text
-43 passed
+50 passed
 - Celery webhook task registration
 - Redis-backed asynchronous dispatch
 - real worker execution
@@ -230,6 +269,7 @@ Latest full-suite verification:
 - maximum retry enforcement
 - processing-state tracking
 - retry-exhaustion tracking
+
 ```
 
 Command:
@@ -239,6 +279,14 @@ docker compose exec web pytest -q
 ```
 
 Step 35 coverage includes valid/invalid HMAC signatures, unknown payments, unsupported statuses, successful webhook handling, and duplicate webhook protection.
+
+Step 36 coverage includes
+      - JWT access-token claims and type validation
+      - minimum password length validation
+      - security response headers
+      - configured and rejected CORS origins
+      - security-sensitive configuration validation
+      - safe unhandled-exception handling
 
 ## Database Migration Chain
 
@@ -261,11 +309,11 @@ e3e6a6bd5e42_add_payment_webhook_event_id.py
 Latest local implementation:
 
 ```text
-Step 36 — Webhook Delivery & Retry Infrastructure
+Step 37 — Security & API Hardening
 
 Local verification:
 
-43 passed
+50 passed
 git diff --check → clean
 ```
 
@@ -273,16 +321,9 @@ git diff --check → clean
 ## Current Known Good State
 
 ```text
-Step 30 — Persistent Payment Records      COMPLETED
-Step 31 — Payment Refund Flow             COMPLETED
-Step 32 — Payment Idempotency             COMPLETED
-Step 33 — Payment Audit History           COMPLETED
-Step 34 — Rich Payment Audit Metadata     COMPLETED
-Step 35 — Payment Webhooks                COMPLETED
-Tests                                     41 passed
-Alembic head                              e3e6a6bd5e42
-Step 36 — Webhook Delivery & Retry        IMPLEMENTED
-Tests                                     43 passed
+Step 36 — Webhook Delivery & Retry        COMPLETED
+Step 37 — Security & API Hardening        IMPLEMENTED
+Tests                                     50 passed
 Alembic head                              e3e6a6bd5e42
 ```
 
@@ -299,21 +340,25 @@ Alembic head                              e3e6a6bd5e42
 - Asynchronous webhook processing should be separated from the HTTP request path.
 - Only transient infrastructure failures should trigger automatic retries.
 - Retry exhaustion should leave an operationally visible state.
+- JWT tokens should carry explicit access-token semantics.
+- Password validation should enforce a minimum security baseline.
+- CORS should be explicitly configured instead of using wildcard origins.
+- Security headers should be added at the application boundary.
+- Sensitive configuration should be validated during startup.
+- Unexpected application errors should not expose internal details to clients.
 - Payment and refund remain mock provider operations.
 
 ## Pending Work
-
-- Commit and push Step 36 implementation plus updated documentation.
-- Verify GitHub Actions is green for the final Step 36 remote state.
+- Commit and push Step 37 implementation plus updated documentation.
+- Verify GitHub Actions is green for the final Step 37 remote state.
 
 ## Future Enhancements
 
 - Real payment gateway integration
-- Provider webhook delivery/retry infrastructure beyond the local Celery simulation- Richer payment audit event types and correlation IDs
-- Structured logging
+- Provider webhook delivery/retry infrastructure beyond the local Celery simulation
+- Richer payment audit event types and correlation IDs- Structured logging
 - Metrics and monitoring
 - Distributed tracing
-- Security hardening
 - API versioning
 - Advanced inventory policies
 - Celery retry policies

@@ -119,6 +119,10 @@ def get_current_user(
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
+
+        token_type: str = payload.get("type")
+        if token_type != "access":
+            raise credentials_exception
     except JWTError:
         raise credentials_exception
 

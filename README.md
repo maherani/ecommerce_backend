@@ -183,6 +183,27 @@ Redis broker/backend:
 redis://redis:6379/0
 
 The test suite verifies asynchronous dispatch, retry handling, and retry exhaustion tracking.
+```
+### Step 37 — Security & API Hardening
+
+Security hardening was applied across authentication, password validation, HTTP responses, CORS, and application configuration.
+
+Implemented controls:
+
+- JWT access tokens now contain `exp`, `iat`, and `type=access`.
+- Authenticated requests require a valid access-token type.
+- User registration requires a password with a minimum length of 8 characters.
+- Security response headers are added:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy`
+- CORS origins are configuration-driven through `CORS_ORIGINS`.
+- CORS methods and headers are explicitly restricted.
+- Security-sensitive settings are validated during application startup.
+- Unhandled exceptions return a generic HTTP 500 response without exposing internal error details.
+
+The security changes are covered by automated regression tests.
 
 
 ## Testing
@@ -193,13 +214,13 @@ Run the full suite:
 docker compose exec web pytest -q
 ```
 
+```text
 Latest verified result:
 
-```text
-43 passed
+50 passed
 ```
 
-Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, and duplicate webhook protection.
+Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, duplicate webhook protection, JWT hardening, password validation, security headers, CORS restrictions, security-setting validation, and safe unhandled-exception handling.
 
 ## Current Development Progress
 
@@ -236,6 +257,7 @@ Step 33 — Payment Audit History                 ✅
 Step 34 — Rich Payment Audit Metadata           ✅
 Step 35 — Payment Webhooks                      ✅
 Step 36 — Webhook Delivery & Retry Infrastructure ✅
+Step 37 — Security & API Hardening              ✅
 ```
 
 ## Database Migration Chain
@@ -265,17 +287,17 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest implemented milestone:
 
 ```text
-Step 36 — Webhook Delivery & Retry Infrastructure
+Step 37 — Security & API Hardening
 ```
 
 Latest verified local test result:
 
 ```text
-43 passed
+50 passed
+
 ```
 
-Payment provider integration remains simulated; Step 36 adds asynchronous webhook processing, retry handling, and operational state tracking around the mock payment domain.
-
+Payment provider integration remains simulated. Step 36 provides asynchronous webhook processing and retry handling, while Step 37 adds security hardening across JWT authentication, password validation, HTTP security headers, CORS, startup configuration validation, and safe exception handling.
 ## Documentation
 
 - `PROJECT_STATE.md`

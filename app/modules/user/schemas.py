@@ -1,9 +1,10 @@
+from pydantic import BaseModel, EmailStr, Field
 
-from pydantic import BaseModel, EmailStr
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
+
 
 # اسکیمای جدید برای ورود کاربر
 class UserLogin(BaseModel):
