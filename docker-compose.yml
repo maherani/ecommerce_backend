@@ -53,6 +53,17 @@ services:
     networks:
       - backend_network
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - web
+    networks:
+      - backend_network
+
 networks:
    backend_network:
      driver: bridge

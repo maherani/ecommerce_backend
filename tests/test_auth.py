@@ -1,10 +1,11 @@
 import asyncio
 import uuid
 from unittest.mock import patch
+from starlette.requests import Request
 
 from app.core.config import settings
 from app.core.config import validate_security_settings
-from main import unhandled_exception_handler
+from main import MetricsMiddleware, app, unhandled_exception_handler
 
 @patch("app.modules.user.router.send_welcome_email_task.delay")
 def test_create_user_queues_welcome_email(mock_delay, client):
@@ -130,10 +131,141 @@ def test_security_settings_are_configured():
 def test_unhandled_exception_handler_returns_safe_error():
     response = asyncio.run(
         unhandled_exception_handler(
-            None,
+            Request(
+                {
+                    "type": "http",
+                    "method": "GET",
+                    "path": "/test",
+                    "headers": [],
+                    "query_string": b"",
+                    "scheme": "http",
+                    "server": ("testserver", 80),
+                    "client": ("testclient", 123),
+                }
+            ),
             RuntimeError("sensitive internal error"),
         )
     )
 
     assert response.status_code == 500
     assert response.body == b'{"detail":"Internal server error"}'
+
+def test_metrics_endpoint_exposes_http_metrics(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+    metrics_response = client.get("/metrics")
+
+    assert metrics_response.status_code == 200
+    body = metrics_response.text
+
+    assert "# HELP http_requests_total" in body
+    assert "# TYPE http_requests_total counter" in body
+    assert 'http_requests_total{endpoint="/",method="GET",status="200"}' in body
+
+    assert "# HELP http_request_duration_seconds" in body
+    assert "# TYPE http_request_duration_seconds histogram" in body
+    assert 'http_request_duration_seconds_count{endpoint="/",method="GET"}' in body
+
+def test_request_id_is_returned_and_preserved(client):
+    request_id = "test-request-id-123"
+
+    response = client.get(
+        "/",
+        headers={"X-Request-ID": request_id},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == request_id
+
+def test_request_id_is_generated_when_missing(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+    request_id = response.headers.get("X-Request-ID")
+
+    assert request_id is not None
+    assert len(request_id) == 36
+    assert request_id.count("-") == 4
+
+def test_client_error_is_recorded_in_metrics(client):
+    response = client.get(
+        "/users/999999999",
+        headers={"X-Request-ID": "test-404-request"},
+    )
+
+    assert response.status_code in (404, 405)
+
+    metrics_response = client.get("/metrics")
+
+    assert metrics_response.status_code == 200
+    body = metrics_response.text
+
+    assert 'status="404"' in body or 'status="405"' in body
+
+def test_metrics_middleware_records_500_on_exception(client):
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/test-500",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "client": ("testclient", 123),
+        }
+    )
+
+    middleware = MetricsMiddleware(app)
+
+    async def call_next(request):
+        raise RuntimeError("test failure")
+
+    try:
+        asyncio.run(middleware.dispatch(request, call_next))
+    except RuntimeError:
+        pass
+    else:
+        assert False, "Expected RuntimeError"
+
+    metrics_response = client.get("/metrics")
+
+    assert metrics_response.status_code == 200
+    body = metrics_response.text
+
+    assert (
+        'http_requests_total{endpoint="/test-500",method="GET",status="500"}'
+        in body
+    )
+def test_unhandled_exception_logs_request_id(caplog):
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/test-error",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "client": ("testclient", 123),
+        }
+    )
+
+    request.state.request_id = "test-error-request-789"
+
+    with caplog.at_level("ERROR", logger="app.request"):
+        response = asyncio.run(
+            unhandled_exception_handler(
+                request,
+                RuntimeError("sensitive internal error"),
+            )
+        )
+
+    assert response.status_code == 500
+    assert "Unhandled application exception" in caplog.text
+    assert any(
+        record.request_id == "test-error-request-789"
+        for record in caplog.records
+    )
