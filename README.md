@@ -24,7 +24,7 @@ Client / Frontend
        +---- Redis
 ```
 
-Docker Compose services: `db`, `redis`, `web`, `celery_worker`.
+Docker Compose services: `db`, `redis`, `web`, `celery_worker`, `prometheus`.
 
 ## Payment
 
@@ -134,6 +134,7 @@ Migration:
 ```text
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
+
 ### Step 36 — Webhook Delivery & Retry Infrastructure
 
 Webhook processing is asynchronous and is handled by Celery using Redis as the broker/backend.
@@ -160,51 +161,94 @@ Process Payment / Order
        |
        v
 Commit
+```
 
 Retry behavior:
 
-Transient ConnectionError failures are retried.
-Maximum retries: 3.
-Retry uses backoff.
-Permanent domain errors such as missing webhook events, missing payments, or unsupported statuses are not treated as transient retry conditions.
+- Transient `ConnectionError` failures are retried.
+- Maximum retries: 3.
+- Retry uses backoff.
+- Permanent domain errors such as missing webhook events, missing payments, or unsupported statuses are not treated as transient retry conditions.
 
-Webhook processing status is stored in PaymentEvent.metadata:
+Webhook processing status is stored in `PaymentEvent.metadata`:
 
+```text
 processing
 processed
 failed_after_retries
+```
 
 Celery task:
 
+```text
 app.tasks.payment_tasks.process_payment_webhook
+```
 
 Redis broker/backend:
 
+```text
 redis://redis:6379/0
+```
 
 The test suite verifies asynchronous dispatch, retry handling, and retry exhaustion tracking.
-```
+
 ### Step 37 — Security & API Hardening
 
 Security hardening was applied across authentication, password validation, HTTP responses, CORS, and application configuration.
 
 Implemented controls:
 
-- JWT access tokens now contain `exp`, `iat`, and `type=access`.
+- JWT access tokens contain `exp`, `iat`, and `type=access`.
 - Authenticated requests require a valid access-token type.
 - User registration requires a password with a minimum length of 8 characters.
-- Security response headers are added:
-  - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: DENY`
-  - `Referrer-Policy: strict-origin-when-cross-origin`
-  - `Permissions-Policy`
+- Security response headers are added.
 - CORS origins are configuration-driven through `CORS_ORIGINS`.
 - CORS methods and headers are explicitly restricted.
 - Security-sensitive settings are validated during application startup.
 - Unhandled exceptions return a generic HTTP 500 response without exposing internal error details.
 
-The security changes are covered by automated regression tests.
+### Step 38 — Observability
 
+The API now exposes application metrics, centralized request logging, and request correlation IDs.
+
+Metrics:
+
+```text
+http_requests_total
+http_request_duration_seconds
+```
+
+The `/metrics` endpoint exposes Prometheus-compatible metrics. Prometheus scrapes the API every 5 seconds through the `ecommerce_api` job targeting `web:8000`.
+
+Request logging records:
+
+```text
+method
+path
+status
+request_id
+duration_ms
+```
+
+Log severity is based on the HTTP response status:
+
+```text
+2xx/3xx → INFO
+4xx     → WARNING
+5xx     → ERROR
+```
+
+Unhandled exceptions are logged with the request correlation ID while the client receives a generic 500 response.
+
+`X-Request-ID` is preserved when supplied by the client and generated as a UUID when absent. The value is returned in the response header and included in application logs.
+
+Prometheus configuration:
+
+```text
+prometheus.yml
+```
+
+The Step 38 implementation is covered by automated tests for metrics exposure, Prometheus-compatible samples, request ID propagation/generation, 4xx metrics, 5xx metrics, and exception logging correlation.
 
 ## Testing
 
@@ -214,13 +258,13 @@ Run the full suite:
 docker compose exec web pytest -q
 ```
 
-```text
 Latest verified result:
 
-50 passed
+```text
+56 passed
 ```
 
-Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, duplicate webhook protection, JWT hardening, password validation, security headers, CORS restrictions, security-setting validation, and safe unhandled-exception handling.
+Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, duplicate webhook protection, JWT hardening, password validation, security headers, CORS restrictions, security-setting validation, safe unhandled-exception handling, Prometheus metrics, request latency tracking, request ID propagation, 4xx/5xx observability, and exception log correlation.
 
 ## Current Development Progress
 
@@ -258,6 +302,7 @@ Step 34 — Rich Payment Audit Metadata           ✅
 Step 35 — Payment Webhooks                      ✅
 Step 36 — Webhook Delivery & Retry Infrastructure ✅
 Step 37 — Security & API Hardening              ✅
+Step 38 — Observability                          ✅
 ```
 
 ## Database Migration Chain
@@ -276,6 +321,8 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
+Step 38 adds no database migration.
+
 ## Development Workflow
 
 ```text
@@ -284,20 +331,20 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 
 ## Project Status
 
-Latest implemented milestone:
+Latest documented milestone:
 
 ```text
-Step 37 — Security & API Hardening
+Step 38 — Observability
 ```
 
 Latest verified local test result:
 
 ```text
-50 passed
-
+56 passed
 ```
 
-Payment provider integration remains simulated. Step 36 provides asynchronous webhook processing and retry handling, while Step 37 adds security hardening across JWT authentication, password validation, HTTP security headers, CORS, startup configuration validation, and safe exception handling.
+The payment provider remains simulated. The platform now has security hardening from Step 37 and an observability foundation from Step 38 based on Prometheus metrics, centralized request logging, and request correlation IDs.
+
 ## Documentation
 
 - `PROJECT_STATE.md`

@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 ## Objective
-Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, payment webhooks, webhook delivery/retry infrastructure, security hardening, and production-readiness practices.
+Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, payment webhooks, webhook delivery/retry infrastructure, security hardening, observability, and production-readiness practices.
 
 ## Current Architecture
 
@@ -17,10 +17,15 @@ FastAPI
   │     └── Payment  (1:1)
   │             └── PaymentEvent (1:N)
   ├── Rate Limiting
+  ├── Observability
+  │     ├── Prometheus metrics
+  │     ├── Request logging
+  │     └── Request ID / correlation
   └── Background Tasks
 
 PostgreSQL ← application data
 Redis      ← cache / rate limiting / Celery broker/backend
+Prometheus ← API metrics scraping
 ```
 
 ## Completed Steps
@@ -34,6 +39,8 @@ Steps 1–25 completed, followed by:
 - Step 34 — Rich payment audit metadata
 - Step 35 — Payment webhooks
 - Step 36 — Webhook Delivery & Retry Infrastructure
+- Step 37 — Security & API Hardening
+- Step 38 — Observability
 
 ## Implemented Features
 
@@ -170,6 +177,7 @@ Migration:
 ```text
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
+
 ### Webhook Delivery & Retry Infrastructure — Step 36
 
 Webhook processing is moved to Celery and Redis.
@@ -196,25 +204,30 @@ commit
 
 Celery task:
 
+```text
 app.tasks.payment_tasks.process_payment_webhook
+```
 
 Redis configuration:
 
+```text
 redis://redis:6379/0
+```
 
 Retry policy:
 
-Retries are handled explicitly by the task.
-Only transient ConnectionError failures are retried.
-Maximum retries: 3.
-Retry uses backoff.
-Permanent domain errors are not retried as transient errors.
+- Only transient `ConnectionError` failures are retried.
+- Maximum retries: 3.
+- Retry uses backoff.
+- Permanent domain errors are not retried as transient errors.
 
-Webhook processing status is recorded in PaymentEvent.metadata:
+Webhook processing status is recorded in `PaymentEvent.metadata`:
 
+```text
 processing
 processed
 failed_after_retries
+```
 
 Worker verification confirmed the task is registered, receives jobs from Redis, processes webhook events, and performs the configured retry cycle for transient failures.
 
@@ -222,54 +235,93 @@ Worker verification confirmed the task is registered, receives jobs from Redis, 
 
 Security hardening was applied across authentication, password validation, HTTP responses, CORS, and application configuration.
 
-JWT:
+JWT controls:
 
 ```text
 exp
 iat
 type=access
-Authenticated requests require type=access.
+```
 
 Password policy:
 
+```text
 minimum length = 8
+```
 
-Security response headers:
+Security response headers include:
 
+```text
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
 Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy
+```
 
-CORS is configuration-driven through CORS_ORIGINS and explicitly restricts allowed origins, methods, and headers.
+CORS is configuration-driven through `CORS_ORIGINS` and explicitly restricts allowed origins, methods, and headers.
 
 Security-sensitive configuration is validated during startup:
 
+```text
 SECRET_KEY
 PAYMENT_WEBHOOK_SECRET
+```
 
 Unhandled exceptions return a generic HTTP 500 response without exposing internal exception details.
 
-Step 37 verification:
+### Observability — Step 38
 
-50 passed
-git diff --check → clean
+The application now exposes Prometheus-compatible HTTP metrics, centralized request logging, and request correlation IDs.
+
+Metrics:
+
+```text
+http_requests_total
+http_request_duration_seconds
 ```
+
+Metrics are exposed at:
+
+```text
+GET /metrics
+```
+
+Prometheus configuration:
+
+```text
+prometheus.yml
+```
+
+Prometheus scrapes `web:8000/metrics` every 5 seconds using the `ecommerce_api` job.
+
+Request logs contain:
+
+```text
+method
+path
+status
+request_id
+duration_ms
+```
+
+Logging severity:
+
+```text
+2xx/3xx → INFO
+4xx     → WARNING
+5xx     → ERROR
+```
+
+`X-Request-ID` is preserved when supplied by the client and generated as a UUID when absent. It is returned in the response and included in application logs.
+
+Unhandled exceptions are logged with the request ID while the client receives a generic 500 response.
 
 ## Testing
 
 Latest full-suite verification:
 
 ```text
-50 passed
-- Celery webhook task registration
-- Redis-backed asynchronous dispatch
-- real worker execution
-- retry handling
-- maximum retry enforcement
-- processing-state tracking
-- retry-exhaustion tracking
-
+56 passed
 ```
 
 Command:
@@ -280,13 +332,11 @@ docker compose exec web pytest -q
 
 Step 35 coverage includes valid/invalid HMAC signatures, unknown payments, unsupported statuses, successful webhook handling, and duplicate webhook protection.
 
-Step 36 coverage includes
-      - JWT access-token claims and type validation
-      - minimum password length validation
-      - security response headers
-      - configured and rejected CORS origins
-      - security-sensitive configuration validation
-      - safe unhandled-exception handling
+Step 36 coverage includes Celery task registration, Redis-backed dispatch, real worker execution, retry handling, maximum retry enforcement, processing-state tracking, and retry-exhaustion tracking.
+
+Step 37 coverage includes JWT access-token claims and type validation, minimum password length, security response headers, configured/rejected CORS origins, startup security validation, and safe unhandled-exception handling.
+
+Step 38 coverage includes Prometheus metrics exposure, request latency tracking, request ID propagation/generation, 4xx and 5xx observability, and exception log correlation.
 
 ## Database Migration Chain
 
@@ -304,26 +354,32 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
+Step 38 adds no database migration.
+
 ## Repository Status
 
-Latest local implementation:
+Latest documented implementation:
 
 ```text
-Step 37 — Security & API Hardening
+Step 38 — Observability
+```
 
-Local verification:
+Latest verified local suite before documentation sync:
 
-50 passed
+```text
+56 passed
 git diff --check → clean
 ```
 
+The Step 38 application changes are implemented locally and are ready for the next application-code commit/push.
 
 ## Current Known Good State
 
 ```text
 Step 36 — Webhook Delivery & Retry        COMPLETED
-Step 37 — Security & API Hardening        IMPLEMENTED
-Tests                                     50 passed
+Step 37 — Security & API Hardening        COMPLETED
+Step 38 — Observability                   IMPLEMENTED
+Tests                                     56 passed
 Alembic head                              e3e6a6bd5e42
 ```
 
@@ -346,26 +402,30 @@ Alembic head                              e3e6a6bd5e42
 - Security headers should be added at the application boundary.
 - Sensitive configuration should be validated during startup.
 - Unexpected application errors should not expose internal details to clients.
+- Prometheus metrics provide machine-readable signals for request rate and latency.
+- Request IDs make logs traceable across individual HTTP requests.
+- Error-level logging should retain correlation context without exposing sensitive details to clients.
 - Payment and refund remain mock provider operations.
 
 ## Pending Work
-- Commit and push Step 37 implementation plus updated documentation.
-- Verify GitHub Actions is green for the final Step 37 remote state.
+
+- Commit and push Step 38 application implementation plus updated documentation.
+- Verify GitHub Actions is green for the final Step 38 remote state.
 
 ## Future Enhancements
 
 - Real payment gateway integration
 - Provider webhook delivery/retry infrastructure beyond the local Celery simulation
-- Richer payment audit event types and correlation IDs- Structured logging
-- Metrics and monitoring
+- Richer payment audit event types and correlation IDs
+- Structured JSON logging
 - Distributed tracing
 - API versioning
 - Advanced inventory policies
-- Celery retry policies
+- Production alerting and SLO-based monitoring
 
 ## Next Recommended Step
 
-After local/remote sync and CI verification, continue to the next domain milestone.
+After Step 38 application-code commit and CI verification, continue to the next platform milestone.
 
 ## Notes For Future Sessions
 
