@@ -18,209 +18,56 @@ Client / Frontend
        |       +---- Payment (1:1)
        |               +---- PaymentEvent (1:N)
        +---- Rate Limiting
+       +---- Observability
+       |       +---- Prometheus metrics
+       |       +---- Request logging
+       |       +---- Request ID / correlation
+       |       +---- Grafana dashboards
        +---- Background Tasks
        |
        +---- PostgreSQL
        +---- Redis
 ```
 
-Docker Compose services: `db`, `redis`, `web`, `celery_worker`, `prometheus`.
+Docker Compose services: `db`, `redis`, `web`, `celery_worker`, `prometheus`, and `grafana`.
 
 ## Payment
 
 ### Step 30 — Persistent Payment Records
-
-`POST /payment/process` persists a Payment record, generates a unique transaction ID, records `paid_at`, and changes the order from `pending` to `paid`.
-
-Migration:
-
-```text
-cff58edd10a9_add_payments_table.py
-```
+`POST /payment/process` persists Payment state, creates a unique transaction ID, records `paid_at`, and changes a pending order to paid.
 
 ### Step 31 — Payment Refund
-
-```text
-POST /payment/{order_id}/refund
-```
-
-Only the authenticated order owner can refund. Payment and order must still be `paid`; duplicate refunds are rejected. `refunded_at` is recorded and the original transaction ID is preserved.
+`POST /payment/{order_id}/refund` validates ownership and paid state, prevents duplicate refunds, records `refunded_at`, and preserves the original transaction ID. The provider operation remains simulated.
 
 ### Step 32 — Payment Idempotency
-
-`POST /payment/process` accepts an optional `idempotency_key`.
-
-The key is persisted on `payments.idempotency_key` with a unique database constraint:
-
-```text
-uq_payments_idempotency_key
-```
-
-Behavior:
-
-- Same key + same order: returns the existing Payment result without creating another Payment.
-- Same key + different order: returns HTTP `409`.
-- Requests without a key remain supported.
-
-Migration:
-
-```text
-aea3438feb25_add_payment_idempotency_key.py
-```
+`POST /payment/process` accepts an optional `idempotency_key`, persisted with the unique constraint `uq_payments_idempotency_key`. Replaying the same key for the same order returns the existing result; using it for another order returns HTTP 409.
 
 ### Step 33 — Payment Audit History
-
-A dedicated `payment_events` table records important Payment state changes without overwriting the Payment record.
-
-The `PaymentEvent` entity stores:
-
-```text
-payment_id
-event_type
-status
-created_at
-actor_user_id
-metadata
-event_id
-```
-
-Current events include payment creation, refund, and webhook events. Duplicate idempotent payment requests and duplicate webhook deliveries do not create duplicate audit events.
-
-Migration:
-
-```text
-e124ed32b079_add_payment_events_table.py
-```
+The `payment_events` table stores immutable Payment state-change events, including payment creation, refunds, and webhook events.
 
 ### Step 34 — Rich Payment Audit Metadata
-
-Payment events record the actor responsible for the event and structured JSON metadata. User-triggered payment/refund events store `actor_user_id`; webhook events can use a null actor.
-
-Metadata can include order ID, amount, transaction ID, refund timestamp, event ID, and event source.
-
-Migration:
-
-```text
-2a408bf8badb_add_payment_audit_metadata.py
-```
+Payment events include `actor_user_id` and structured JSON metadata containing contextual information such as order ID, amount, transaction ID, refund timestamp, webhook event ID, and source.
 
 ### Step 35 — Payment Webhooks
-
-A provider callback endpoint is available at:
-
-```text
-POST /payment/webhook
-```
-
-Webhook payload:
-
-```text
-transaction_id
-status
-event_id
-```
-
-Webhook security and behavior:
-
-- HMAC-SHA256 signature validation using `PAYMENT_WEBHOOK_SECRET`.
-- Unknown transactions return HTTP `404`.
-- Unsupported statuses return HTTP `400`.
-- Supported `paid` and `refunded` states update Payment and Order state.
-- Each processed webhook creates a `PaymentEvent` with `event_id` and source metadata.
-- Repeated delivery with the same `event_id` returns `Webhook already processed` and does not create another audit event.
-
-Migration:
-
-```text
-e3e6a6bd5e42_add_payment_webhook_event_id.py
-```
+`POST /payment/webhook` validates an HMAC-SHA256 signature, checks `event_id` idempotency, validates the transaction and status, records an audit event, and supports `paid` and `refunded` state changes.
 
 ### Step 36 — Webhook Delivery & Retry Infrastructure
-
-Webhook processing is asynchronous and is handled by Celery using Redis as the broker/backend.
-
-Processing flow:
-
-```text
-External Provider
-       |
-       v
-POST /payment/webhook
-       |
-       v
-Validate HMAC + event_id
-       |
-       v
-Persist webhook event
-       |
-       v
-Celery task
-       |
-       v
-Process Payment / Order
-       |
-       v
-Commit
-```
-
-Retry behavior:
-
-- Transient `ConnectionError` failures are retried.
-- Maximum retries: 3.
-- Retry uses backoff.
-- Permanent domain errors such as missing webhook events, missing payments, or unsupported statuses are not treated as transient retry conditions.
-
-Webhook processing status is stored in `PaymentEvent.metadata`:
-
-```text
-processing
-processed
-failed_after_retries
-```
-
-Celery task:
-
-```text
-app.tasks.payment_tasks.process_payment_webhook
-```
-
-Redis broker/backend:
-
-```text
-redis://redis:6379/0
-```
-
-The test suite verifies asynchronous dispatch, retry handling, and retry exhaustion tracking.
+Webhook state processing is asynchronous through Celery and Redis. Transient `ConnectionError` failures are retried up to 3 times with backoff; permanent domain errors are not treated as transient failures. Processing state is stored in `PaymentEvent.metadata`.
 
 ### Step 37 — Security & API Hardening
-
-Security hardening was applied across authentication, password validation, HTTP responses, CORS, and application configuration.
-
-Implemented controls:
-
-- JWT access tokens contain `exp`, `iat`, and `type=access`.
-- Authenticated requests require a valid access-token type.
-- User registration requires a password with a minimum length of 8 characters.
-- Security response headers are added.
-- CORS origins are configuration-driven through `CORS_ORIGINS`.
-- CORS methods and headers are explicitly restricted.
-- Security-sensitive settings are validated during application startup.
-- Unhandled exceptions return a generic HTTP 500 response without exposing internal error details.
+JWT access-token claims, password minimum length, security response headers, configuration-driven CORS, startup security validation, and safe generic 500 responses are implemented.
 
 ### Step 38 — Observability
-
-The API now exposes application metrics, centralized request logging, and request correlation IDs.
-
-Metrics:
+The API exposes:
 
 ```text
 http_requests_total
 http_request_duration_seconds
 ```
 
-The `/metrics` endpoint exposes Prometheus-compatible metrics. Prometheus scrapes the API every 5 seconds through the `ecommerce_api` job targeting `web:8000`.
+Metrics are available at `GET /metrics`. Prometheus uses `prometheus.yml` and scrapes `web:8000/metrics` every 5 seconds through the `ecommerce_api` job.
 
-Request logging records:
+Request logs contain:
 
 ```text
 method
@@ -230,25 +77,29 @@ request_id
 duration_ms
 ```
 
-Log severity is based on the HTTP response status:
+`X-Request-ID` is preserved when supplied and generated as a UUID when absent. It is returned in the response and included in logs. HTTP 5xx responses are also represented in request metrics.
+
+### Grafana Dashboard
+
+Grafana is deployed as a Docker Compose service on port `3000`, uses the persistent `grafana_data` volume, and reads Prometheus metrics from the internal Compose network.
+
+Current dashboard:
 
 ```text
-2xx/3xx → INFO
-4xx     → WARNING
-5xx     → ERROR
+Dashboard: Dashbourd 1
 ```
 
-Unhandled exceptions are logged with the request correlation ID while the client receives a generic 500 response.
+Current panels:
 
-`X-Request-ID` is preserved when supplied by the client and generated as a UUID when absent. The value is returned in the response header and included in application logs.
+| Panel | Type | PromQL |
+|---|---|---|
+| API Request Rate | Time series | `rate(http_requests_total[1m])` |
+| API Request Latency (P95) | Time series | `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))` |
+| API Error Rate | Time series | `sum(rate(http_requests_total{status=~"4..|5.."}[5m]))` |
+| Requests by Endpoint | Time series | `sum by (endpoint) (rate(http_requests_total[5m]))` |
+| HTTP Requests by Status | Time series | `sum by (status) (rate(http_requests_total[5m]))` |
 
-Prometheus configuration:
-
-```text
-prometheus.yml
-```
-
-The Step 38 implementation is covered by automated tests for metrics exposure, Prometheus-compatible samples, request ID propagation/generation, 4xx metrics, 5xx metrics, and exception logging correlation.
+This Grafana dashboard is the visualization layer for the Step 38 Prometheus observability foundation.
 
 ## Testing
 
@@ -258,51 +109,25 @@ Run the full suite:
 docker compose exec web pytest -q
 ```
 
-Latest verified result:
+Latest verified local result:
 
 ```text
 56 passed
 ```
 
-Coverage includes payment persistence, refunds, idempotency, audit history, rich audit metadata, webhook signature validation, webhook error handling, webhook state transitions, duplicate webhook protection, JWT hardening, password validation, security headers, CORS restrictions, security-setting validation, safe unhandled-exception handling, Prometheus metrics, request latency tracking, request ID propagation, 4xx/5xx observability, and exception log correlation.
-
 ## Current Development Progress
 
 ```text
-Step 1  — Project Setup                         ✅
-Step 2  — Configuration & Security              ✅
-Step 3  — User Module                           ✅
-Step 4  — PostgreSQL & Authentication           ✅
-Step 5  — Alembic                               ✅
-Step 6  — Dockerization                         ✅
-Step 7  — JWT Protected Routes                  ✅
-Step 8  — RBAC / Admin Authorization            ✅
-Step 9  — Product & Category Catalog            ✅
-Step 10 — Product Search & Pagination           ✅
-Step 11 — Shopping Cart                         ✅
-Step 12 — Orders & Checkout                     ✅
-Step 13 — Mock Payment                          ✅
-Step 14 — Automated Testing                     ✅
-Step 15 — E2E Shopping Flow                     ✅
-Step 16 — GitHub Actions CI                     ✅
-Step 17 — Alembic Schema Management             ✅
-Step 18 — Redis Product Caching                 ✅
-Step 19 — Redis Rate Limiting                   ✅
-Step 20 — Celery Background Worker              ✅
-Step 21 — Alembic Schema Reconciliation         ✅
-Step 22 — Atomic Stock Reservation              ✅
-Step 23 — Order Cancellation & Stock Restoration ✅
-Step 24 — Order Lifecycle & Admin Management    ✅
-Step 25 — Shipping & Delivery Management        ✅
-Step 30 — Persistent Payment Records            ✅
-Step 31 — Payment Refund Flow                   ✅
-Step 32 — Payment Idempotency                   ✅
-Step 33 — Payment Audit History                 ✅
-Step 34 — Rich Payment Audit Metadata           ✅
-Step 35 — Payment Webhooks                      ✅
-Step 36 — Webhook Delivery & Retry Infrastructure ✅
-Step 37 — Security & API Hardening              ✅
-Step 38 — Observability                          ✅
+Step 1–25  — Core platform milestones                         ✅
+Step 30    — Persistent Payment Records                       ✅
+Step 31    — Payment Refund Flow                              ✅
+Step 32    — Payment Idempotency                              ✅
+Step 33    — Payment Audit History                            ✅
+Step 34    — Rich Payment Audit Metadata                      ✅
+Step 35    — Payment Webhooks                                 ✅
+Step 36    — Webhook Delivery & Retry Infrastructure           ✅
+Step 37    — Security & API Hardening                          ✅
+Step 38    — Observability + Grafana Dashboard                 ✅
 ```
 
 ## Database Migration Chain
@@ -334,7 +159,7 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest documented milestone:
 
 ```text
-Step 38 — Observability
+Step 38 — Observability + Grafana Dashboard
 ```
 
 Latest verified local test result:
@@ -343,7 +168,7 @@ Latest verified local test result:
 56 passed
 ```
 
-The payment provider remains simulated. The platform now has security hardening from Step 37 and an observability foundation from Step 38 based on Prometheus metrics, centralized request logging, and request correlation IDs.
+The payment provider remains simulated. The platform now has security hardening from Step 37 and an observability stack based on Prometheus metrics, request logging, request correlation IDs, and Grafana visualization.
 
 ## Documentation
 
