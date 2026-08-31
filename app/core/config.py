@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     # Payment webhook security.
     PAYMENT_WEBHOOK_SECRET: str
-    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     # Build the SQLAlchemy connection URL from environment variables.
     @property
     def DATABASE_URL(self) -> str:
