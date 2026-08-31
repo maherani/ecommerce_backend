@@ -44,7 +44,7 @@ Steps 1–25 completed, followed by:
 - Step 36 — Webhook Delivery & Retry Infrastructure
 - Step 37 — Security & API Hardening
 - Step 38 — Observability
-- Step 39 — Frontend foundation and API integration (implemented locally)
+- Step 39 — Frontend foundation and API integration
 
 ## Implemented Features
 
@@ -129,7 +129,7 @@ GET /products/
 
 The initial product UI includes reusable product-card/grid components and application pages/layouts/services/types. Product data has been verified in the browser.
 
-The frontend initialization and current UI changes are currently local development work; they must be committed and pushed separately before the remote repository can be considered synchronized with this milestone.
+The Step 39 frontend implementation has been committed and pushed to the remote `main` branch.
 
 ## Testing
 
@@ -153,7 +153,7 @@ npm run build
 npm run lint
 ```
 
-Both frontend commands are currently green locally.
+Both frontend commands were verified green locally. The GitHub Actions workflow currently verifies the Dockerized backend build, migrations, and Pytest suite; it does not yet run the frontend build/lint commands.
 
 ## Database Migration Chain
 
@@ -175,9 +175,7 @@ Steps 37–39 add no database migration.
 
 ## Repository Status
 
-Remote documentation has now been synchronized for the current API surface and frontend milestone. `docs/API.md` was previously empty and now documents the verified endpoints, authentication requirements, request models, and observability endpoints.
-
-The frontend implementation itself remains a local working-tree change until its code is committed and pushed.
+The Step 39 frontend implementation and synchronized documentation are committed and pushed to the remote `main` branch. The repository contains the React/TypeScript frontend foundation, current API documentation, architecture documentation, and project-state documentation for the milestone.
 
 Latest verified backend suite:
 
@@ -192,13 +190,15 @@ npm run build → green
 npm run lint  → green
 ```
 
+The current GitHub Actions workflow remains green for the backend Docker/pytest pipeline. Frontend build and lint are verified locally but are not yet separate CI checks.
+
 ## Current Known Good State
 
 ```text
 Step 36 — Webhook Delivery & Retry        COMPLETED
 Step 37 — Security & API Hardening        COMPLETED
 Step 38 — Observability                   IMPLEMENTED
-Step 39 — Frontend foundation             IMPLEMENTED LOCALLY
+Step 39 — Frontend foundation             IMPLEMENTED AND PUSHED
 Grafana Dashboard                         IMPLEMENTED
 Grafana Panels                            5
 Backend Tests                             56 passed
@@ -228,9 +228,8 @@ Alembic head                              e3e6a6bd5e42
 
 ## Pending Work
 
-- Commit and push the current frontend implementation.
-- Verify CI for the frontend-enabled repository state.
 - Continue frontend product detail, authentication, cart, checkout, and order UI flows.
+- Add frontend build and lint checks to GitHub Actions CI.
 - Keep documentation synchronized after each frontend milestone.
 
 ## Future Enhancements
@@ -248,7 +247,7 @@ Alembic head                              e3e6a6bd5e42
 
 ## Next Recommended Step
 
-Commit and push the verified local frontend foundation, verify CI, then implement the Product Details route and UI using the existing `GET /products/` API surface.
+Implement the Product Details route and UI using the existing `GET /products/` API surface, then extend the frontend authentication, cart, checkout, and order flows. In parallel, add frontend build/lint validation to GitHub Actions.
 
 ## Notes For Future Sessions
 
