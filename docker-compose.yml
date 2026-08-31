@@ -64,9 +64,21 @@ services:
     networks:
       - backend_network
 
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - backend_network
+
 networks:
    backend_network:
      driver: bridge
 
 volumes:
   postgres_data:
+  grafana_data:
