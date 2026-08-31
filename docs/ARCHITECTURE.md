@@ -378,14 +378,14 @@ FastAPI Product API
 
 The initial frontend provides the application structure and product-list integration. Product data has been verified in the browser.
 
+The Step 39 frontend implementation is committed and pushed to the remote `main` branch.
+
 Local validation:
 
 ```text
 npm run build → green
 npm run lint  → green
 ```
-
-The frontend code for Step 39 is implemented locally and is pending its repository code commit/push synchronization.
 
 ## 4. Checkout Transaction
 
@@ -454,18 +454,18 @@ npm run build → green
 npm run lint  → green
 ```
 
-CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. The repository's CI is currently green after the CORS configuration/test update.
+The GitHub Actions workflow performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. It is currently green for the backend pipeline. Frontend build and lint are verified locally but are not yet CI checks.
 
 ## 8. Current Status
 
 ```text
 Step 38 — Observability                         COMPLETED
-Step 39 — Frontend Foundation + Product API    IMPLEMENTED LOCALLY
+Step 39 — Frontend Foundation + Product API    IMPLEMENTED AND PUSHED
 
 Backend tests                                  56 passed
 Frontend build                                 GREEN
 Frontend lint                                  GREEN
-CI                                             GREEN
+CI                                             GREEN (backend pipeline)
 ```
 
-The remote documentation has been synchronized with the verified frontend milestone. The frontend implementation itself remains a local working-tree change until committed and pushed.
+The remote repository is synchronized with the Step 39 frontend milestone and its current documentation.
