@@ -1,29 +1,29 @@
 # PROJECT_STATE
 
 ## Objective
-Build a production-oriented e-commerce backend with FastAPI, PostgreSQL, Redis, SQLAlchemy, JWT, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, rich audit metadata, payment webhooks, webhook delivery/retry infrastructure, security hardening, observability, and production-readiness practices.
+Build a production-oriented e-commerce platform with a FastAPI backend and React/TypeScript frontend, backed by PostgreSQL and Redis, with JWT authentication, Alembic, Docker, Pytest, GitHub Actions, SlowAPI, Celery, inventory management, payment persistence, refunds, payment idempotency, audit history, payment webhooks, security hardening, observability, and production-readiness practices.
 
 ## Current Architecture
 
 ```text
-Client
-  ↓
-FastAPI
-  ├── User
-  ├── Product / Category
-  ├── Cart
-  ├── Order / OrderItem
-  │     ├── Shipping (1:1)
-  │     └── Payment  (1:1)
-  │             └── PaymentEvent (1:N)
-  ├── Rate Limiting
-  ├── Observability
-  │     ├── Prometheus metrics
-  │     ├── Request logging
-  │     ├── Request ID / correlation
-  │     └── Grafana dashboards
-  └── Background Tasks
-      └── Celery Worker
+Client / React Frontend
+        ↓
+     FastAPI
+        ├── User
+        ├── Product / Category
+        ├── Cart
+        ├── Order / OrderItem
+        │     ├── Shipping (1:1)
+        │     └── Payment  (1:1)
+        │             └── PaymentEvent (1:N)
+        ├── Rate Limiting
+        ├── Observability
+        │     ├── Prometheus metrics
+        │     ├── Request logging
+        │     ├── Request ID / correlation
+        │     └── Grafana dashboards
+        └── Background Tasks
+              └── Celery Worker
 
 PostgreSQL ← application data
 Redis      ← cache / rate limiting / Celery broker/backend
@@ -44,6 +44,7 @@ Steps 1–25 completed, followed by:
 - Step 36 — Webhook Delivery & Retry Infrastructure
 - Step 37 — Security & API Hardening
 - Step 38 — Observability
+- Step 39 — Frontend foundation and API integration (implemented locally)
 
 ## Implemented Features
 
@@ -55,6 +56,13 @@ Steps 30–36 implement persistent payments, refunds, idempotency, immutable aud
 
 ### Security & API Hardening — Step 37
 JWT access-token claims include `exp`, `iat`, and `type=access`. Password minimum length is 8. Security headers, configuration-driven CORS, startup validation of sensitive settings, and safe generic 500 responses are implemented.
+
+The development frontend runs on Vite's default port `5173`. CORS is configured for:
+
+```text
+http://localhost:5173
+http://127.0.0.1:5173
+```
 
 ### Observability — Step 38
 
@@ -71,15 +79,7 @@ Request logs contain `method`, `path`, `status`, `request_id`, and `duration_ms`
 
 ### Grafana Dashboard — Step 38 Extension
 
-Grafana is deployed through Docker Compose:
-
-```text
-image: grafana/grafana:latest
-host port: 3000
-volume: grafana_data:/var/lib/grafana
-network: backend_network
-depends_on: prometheus
-```
+Grafana is deployed through Docker Compose and uses the persistent `grafana_data` volume.
 
 Current dashboard:
 
@@ -91,22 +91,45 @@ Current five panels:
 
 ```text
 1. API Request Rate
-   rate(http_requests_total[1m])
-
 2. API Request Latency (P95)
-   histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
-
 3. API Error Rate
-   sum(rate(http_requests_total{status=~"4..|5.."}[5m]))
-
 4. Requests by Endpoint
-   sum by (endpoint) (rate(http_requests_total[5m]))
-
 5. HTTP Requests by Status
-   sum by (status) (rate(http_requests_total[5m]))
 ```
 
-Grafana is the visualization layer for the Step 38 Prometheus observability foundation. No database migration is required for Grafana.
+### Frontend — Step 39
+
+A React + TypeScript frontend was initialized with Vite under:
+
+```text
+frontend/
+```
+
+Current frontend foundation includes:
+
+```text
+React 19
+TypeScript
+Vite
+Oxlint
+```
+
+The frontend has been verified locally with:
+
+```text
+npm run build  → green
+npm run lint   → green
+```
+
+The frontend successfully communicates with the running API and displays products returned by:
+
+```text
+GET /products/
+```
+
+The initial product UI includes reusable product-card/grid components and application pages/layouts/services/types. Product data has been verified in the browser.
+
+The frontend initialization and current UI changes are currently local development work; they must be committed and pushed separately before the remote repository can be considered synchronized with this milestone.
 
 ## Testing
 
@@ -122,7 +145,15 @@ Command:
 docker compose exec web pytest -q
 ```
 
-Coverage includes payment persistence/refunds, idempotency, audit history, webhooks, Celery retries, security hardening, Prometheus metrics, request latency, request IDs, 4xx/5xx observability, and exception correlation.
+Frontend verification:
+
+```bash
+cd frontend
+npm run build
+npm run lint
+```
+
+Both frontend commands are currently green locally.
 
 ## Database Migration Chain
 
@@ -140,16 +171,25 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Step 38 adds no database migration.
+Steps 37–39 add no database migration.
 
 ## Repository Status
 
-Remote documentation has been updated to include Grafana and the five verified dashboard panels. The local working tree reported `docker-compose.yml` as modified before documentation synchronization.
+Remote documentation has now been synchronized for the current API surface and frontend milestone. `docs/API.md` was previously empty and now documents the verified endpoints, authentication requirements, request models, and observability endpoints.
 
-Latest verified local suite:
+The frontend implementation itself remains a local working-tree change until its code is committed and pushed.
+
+Latest verified backend suite:
 
 ```text
 56 passed
+```
+
+Latest verified frontend checks:
+
+```text
+npm run build → green
+npm run lint  → green
 ```
 
 ## Current Known Good State
@@ -158,9 +198,12 @@ Latest verified local suite:
 Step 36 — Webhook Delivery & Retry        COMPLETED
 Step 37 — Security & API Hardening        COMPLETED
 Step 38 — Observability                   IMPLEMENTED
+Step 39 — Frontend foundation             IMPLEMENTED LOCALLY
 Grafana Dashboard                         IMPLEMENTED
 Grafana Panels                            5
-Tests                                     56 passed
+Backend Tests                             56 passed
+Frontend Build                            GREEN
+Frontend Lint                             GREEN
 Alembic head                              e3e6a6bd5e42
 ```
 
@@ -178,14 +221,17 @@ Alembic head                              e3e6a6bd5e42
 - Prometheus metrics provide machine-readable signals for request rate and latency.
 - Request IDs make logs traceable across individual HTTP requests.
 - Grafana provides the visualization layer for Prometheus metrics and makes operational trends easier to inspect.
+- A Vite React frontend must use the actual development origin (`localhost:5173`) in backend CORS configuration.
+- Frontend dependency/runtime versions must be compatible with the installed Node.js version.
+- Backend API behavior should be verified from generated OpenAPI data before implementing frontend API integrations.
 - Payment and refund remain mock provider operations.
 
 ## Pending Work
 
-- Synchronize the updated remote documentation into the local working tree.
-- Verify the local `docker-compose.yml` Grafana change remains correct after synchronization.
-- Commit and push the local Compose change from the local repository.
-- Verify GitHub Actions is green for the final remote state.
+- Commit and push the current frontend implementation.
+- Verify CI for the frontend-enabled repository state.
+- Continue frontend product detail, authentication, cart, checkout, and order UI flows.
+- Keep documentation synchronized after each frontend milestone.
 
 ## Future Enhancements
 
@@ -196,10 +242,13 @@ Alembic head                              e3e6a6bd5e42
 - Advanced inventory policies
 - Production alerting and SLO-based monitoring
 - Additional Grafana dashboards and alert rules
+- Product detail and catalog filtering/search
+- Customer authentication UI and session management
+- Cart and checkout UI
 
 ## Next Recommended Step
 
-Synchronize local documentation from `origin/main`, verify the local working tree, then commit and push the verified Grafana Compose change. After CI verification, continue to the next platform milestone.
+Commit and push the verified local frontend foundation, verify CI, then implement the Product Details route and UI using the existing `GET /products/` API surface.
 
 ## Notes For Future Sessions
 
@@ -210,5 +259,6 @@ git status --short
 git log -1 --oneline
 docker compose ps
 docker compose exec web pytest -q
-docker compose exec web alembic current
+cd frontend && npm run build && npm run lint
+cd .. && docker compose exec web alembic current
 ```
