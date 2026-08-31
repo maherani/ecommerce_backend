@@ -3,27 +3,37 @@
 ## 1. System Overview
 
 ```text
-Client
-  ↓
-FastAPI
-  ├── User
-  ├── Product / Category
-  ├── Cart
-  ├── Order / OrderItem
-  │     ├── Shipping (1:1)
-  │     └── Payment (1:1)
-  │             └── PaymentEvent (1:N)
-  ├── Rate Limiting
-  ├── Observability
-  │     ├── Prometheus metrics
-  │     ├── Request logging
-  │     └── Request ID / correlation
-  └── Background Tasks
-      └── Celery Worker
+Client / React Frontend
+        ↓
+     FastAPI
+        ├── User
+        ├── Product / Category
+        ├── Cart
+        ├── Order / OrderItem
+        │     ├── Shipping (1:1)
+        │     └── Payment  (1:1)
+        │             └── PaymentEvent (1:N)
+        ├── Rate Limiting
+        ├── Observability
+        │     ├── Prometheus metrics
+        │     ├── Request logging
+        │     └── Request ID / correlation
+        └── Background Tasks
+              └── Celery Worker
 
 PostgreSQL ← primary database
 Redis      ← cache / rate limiting / Celery broker/backend
 Prometheus ← API metrics scraping
+Grafana    ← Prometheus visualization
+```
+
+The development React frontend is served by Vite on `http://localhost:5173` and communicates with the FastAPI service on `http://localhost:8000`.
+
+Backend CORS explicitly allows the two local frontend origins:
+
+```text
+http://localhost:5173
+http://127.0.0.1:5173
 ```
 
 ## 2. Domain Relationships
@@ -247,19 +257,19 @@ The webhook `event_id` remains unique, preventing duplicate delivery from queuei
 ### Step 37 — Security & API Hardening
 
 ```text
-Client
-  ↓
+Client / React Frontend
+        ↓
 FastAPI
   ↓
 Security Middleware
   ├── Security Headers
   └── CORS restrictions
-  ↓
+        ↓
 Authentication
   ├── JWT signature validation
   ├── exp validation
   └── type=access validation
-  ↓
+        ↓
 Application routes
 ```
 
@@ -300,10 +310,10 @@ Step 37 adds no database migration; it hardens application security and request 
 ### Step 38 — Observability
 
 ```text
-Client
-  ↓
+Client / React Frontend
+        ↓
 FastAPI
-  ↓
+        ↓
 MetricsMiddleware
   ├── request_id generation/preservation
   ├── request duration measurement
@@ -313,6 +323,8 @@ MetricsMiddleware
       /metrics
         ↓
    Prometheus
+        ↓
+     Grafana
 ```
 
 Prometheus metrics:
@@ -348,6 +360,33 @@ Unhandled exceptions are logged with the request correlation ID while the client
 
 5xx exceptions are also recorded in the request metrics with `status=500` before the exception is re-raised to the global exception handler.
 
+### Step 39 — Frontend Foundation
+
+```text
+React 19 + TypeScript
+          ↓
+        Vite
+          ↓
+Reusable layouts / pages / components
+          ↓
+API services + TypeScript types
+          ↓
+GET /products/
+          ↓
+FastAPI Product API
+```
+
+The initial frontend provides the application structure and product-list integration. Product data has been verified in the browser.
+
+Local validation:
+
+```text
+npm run build → green
+npm run lint  → green
+```
+
+The frontend code for Step 39 is implemented locally and is pending its repository code commit/push synchronization.
+
 ## 4. Checkout Transaction
 
 ```text
@@ -376,6 +415,8 @@ Failed checkout rolls back the transaction.
 
 JWT authentication protects user-specific payment and refund operations. Ownership is checked at the Order query level before Payment state changes. Webhooks are provider-authenticated by HMAC rather than user JWT.
 
+Admin-only operations such as category/product creation, order status updates, and shipping updates require a user whose `is_superuser` flag is true.
+
 ## 6. Persistence and Migrations
 
 Alembic is the authoritative schema-management mechanism.
@@ -396,43 +437,35 @@ e3e6a6bd5e42_add_payment_webhook_event_id.py
 
 Step 35 adds a unique `event_id` to `payment_events` so provider webhook delivery can be handled idempotently.
 
-Step 38 adds no database migration.
+Steps 37–39 add no database migration.
 
 ## 7. Testing and CI
 
-Latest verified local suite:
+Latest verified local backend suite:
 
 ```text
 56 passed
 ```
 
-Coverage includes:
+Frontend validation:
 
 ```text
-Payment persistence and refunds
-Payment idempotency and audit history
-Webhook signature validation and duplicate protection
-Celery task registration and Redis-backed dispatch
-Transient retry handling and retry exhaustion tracking
-JWT access-token claims and type validation
-Password minimum length validation
-Security response headers and CORS restrictions
-Startup security-setting validation
-Safe unhandled-exception responses
-Prometheus metrics exposure and request latency
-Request ID propagation and generation
-4xx and 5xx observability
-Exception logging correlation
+npm run build → green
+npm run lint  → green
 ```
 
-CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest.
+CI performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. The repository's CI is currently green after the CORS configuration/test update.
 
 ## 8. Current Status
 
 ```text
-Step 38 — Observability
+Step 38 — Observability                         COMPLETED
+Step 39 — Frontend Foundation + Product API    IMPLEMENTED LOCALLY
 
-56 passed
-
-Step 38 application changes are implemented locally and the documentation has been synchronized to the latest verified state.
+Backend tests                                  56 passed
+Frontend build                                 GREEN
+Frontend lint                                  GREEN
+CI                                             GREEN
 ```
+
+The remote documentation has been synchronized with the verified frontend milestone. The frontend implementation itself remains a local working-tree change until committed and pushed.
