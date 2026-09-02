@@ -80,3 +80,45 @@ export async function getProduct(productId: number) {
 
   return response.json();
 }
+
+export async function getCart() {
+  const response = await authenticatedFetch(`${API_BASE_URL}/cart/`);
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function addToCart(productId: number, quantity: number) {
+  const response = await authenticatedFetch(`${API_BASE_URL}/cart/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      product_id: productId,
+      quantity,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function removeFromCart(itemId: number) {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/cart/${itemId}`,
+    {
+      method: "DELETE",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+}
