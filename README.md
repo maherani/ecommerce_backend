@@ -121,10 +121,47 @@ Frontend authentication now supports:
 - Display of the authenticated user's email and admin status
 
 Runtime authentication was verified successfully in the browser:
-- Login successful
-- `access_token` present in Local Storage
-- Authenticated user displayed
 
+```text
+Login successful
+access_token present in Local Storage
+Authenticated user displayed
+```
+
+### Step 41 — Frontend Product Details
+
+The frontend now supports navigation from the product list to a dedicated product detail page.
+
+```text
+Products Page
+    ↓
+View Product
+    ↓
+/products/:productId
+    ↓
+GET /products/{product_id}
+    ↓
+Product Details Page
+```
+
+The Product Details page loads a product using the route parameter, handles loading and error states, and displays the product title, description, price, and stock status.
+
+The backend now provides:
+
+```text
+GET /products/{product_id}
+```
+
+The endpoint returns `404` when the requested product does not exist.
+
+Product Details was verified successfully in the browser using the development product at `/products/1`.
+
+Frontend validation:
+
+```text
+npm run build → green
+npm run lint  → green
+```
 
 ## Testing
 
@@ -139,6 +176,8 @@ Latest verified result:
 ```text
 56 passed
 ```
+
+The test suite uses a dedicated PostgreSQL database named `ecommerce_db_test`, keeping automated test data separate from the development database.
 
 Run frontend checks:
 
@@ -167,9 +206,10 @@ Step 37    — Security & API Hardening                          ✅
 Step 38    — Observability + Grafana Dashboard                 ✅
 Step 39    — Frontend Foundation + Product Integration          ✅
 Step 40    — Frontend Authentication                            ✅
+Step 41    — Frontend Product Details                           ✅
 ```
 
-Step 39 is implemented, verified locally, committed, and pushed to the remote repository.
+Step 41 is implemented, locally verified, committed, and pushed to the remote repository.
 
 ## Database Migration Chain
 
@@ -187,7 +227,7 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Steps 37–39 add no database migration.
+Steps 37–41 add no database migration.
 
 ## Development Workflow
 
@@ -200,7 +240,7 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest documented milestone:
 
 ```text
-Step 40 — Frontend Authentication
+Step 41 — Frontend Product Details
 ```
 
 Latest verified backend test result:
@@ -216,7 +256,7 @@ build: green
 lint: green
 ```
 
-The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI product API, and frontend authentication has been implemented and runtime-verified.
+The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI product API, frontend authentication, and a verified product detail flow.
 
 ## Documentation
 
