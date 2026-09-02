@@ -9,6 +9,9 @@ Client / React Frontend
         ├── User
         ├── Product / Category
         ├── Cart
+        │     ├── authenticated read
+        │     ├── add/update quantity
+        │     └── remove item
         ├── Order / OrderItem
         │     ├── Shipping (1:1)
         │     └── Payment  (1:1)
@@ -40,6 +43,8 @@ http://127.0.0.1:5173
 
 ```text
 User
+ |
+ +----< CartItem >---- Product
  |
  +----< Order
           |
@@ -305,8 +310,6 @@ PAYMENT_WEBHOOK_SECRET
 
 Unhandled exceptions are converted to a generic HTTP 500 response without exposing internal exception details.
 
-Step 37 adds no database migration; it hardens application security and request handling around the existing schema.
-
 ### Step 38 — Observability
 
 ```text
@@ -378,8 +381,6 @@ FastAPI Product API
 
 The initial frontend provides the application structure and product-list integration. Product data has been verified in the browser.
 
-The Step 39 frontend implementation is committed and pushed to the remote `main` branch.
-
 Local validation:
 
 ```text
@@ -427,18 +428,39 @@ GET /products/{product_id}
 Product details displayed
 ```
 
-The backend provides `GET /products/{product_id}`. It loads the product by ID and returns HTTP 404 when the product does not exist.
+The backend provides `GET /products/{product_id}` and returns HTTP 404 when the product does not exist.
 
-The frontend extracts `productId` from the route with React Router, requests the selected product through the API service, and handles loading, error, and not-found states.
+The frontend extracts `productId` from the route with React Router and handles loading, error, and not-found states.
 
-Runtime verification completed successfully using `/products/1` in the browser.
-
-Local validation:
+### Step 42 — Frontend Cart
 
 ```text
-npm run build → green
-npm run lint  → green
+Product Details
+       ↓
+Add to Cart
+       ↓
+POST /cart/
+       ↓
+Cart Page
+       ↓
+GET /cart/
+       ↓
+Cart Items
 ```
+
+The Cart implementation uses authenticated requests and includes:
+
+```text
+GET    /cart/              → load current user's cart
+POST   /cart/              → add product / increase quantity
+DELETE /cart/{item_id}     → remove item
+```
+
+The Product Details page allows the user to select quantity from 1 through the displayed stock quantity before adding the product. The Cart page displays item quantity, product price, and a calculated total using `price × quantity`.
+
+The backend remains the authoritative layer for product existence, ownership, and stock validation. Frontend quantity limits are user-experience safeguards.
+
+The Cart flow was runtime-verified in the browser, including add, quantity, total calculation, and remove operations.
 
 ## 4. Checkout Transaction
 
@@ -466,7 +488,9 @@ Failed checkout rolls back the transaction.
 
 ## 5. Authentication / Authorization
 
-JWT authentication protects user-specific payment and refund operations. Ownership is checked at the Order query level before Payment state changes. Webhooks are provider-authenticated by HMAC rather than user JWT.
+JWT authentication protects user-specific cart, payment, and refund operations. Cart queries filter by the authenticated user's ID, so users can access only their own cart items.
+
+Ownership is checked at the Order query level before Payment state changes. Webhooks are provider-authenticated by HMAC rather than user JWT.
 
 Admin-only operations such as category/product creation, order status updates, and shipping updates require a user whose `is_superuser` flag is true.
 
@@ -488,9 +512,7 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Step 35 adds a unique `event_id` to `payment_events` so provider webhook delivery can be handled idempotently.
-
-Steps 37–41 add no database migration.
+Steps 37–42 add no database migration.
 
 ## 7. Testing and CI
 
@@ -509,7 +531,7 @@ npm run lint  → green
 
 Automated backend tests use a dedicated PostgreSQL database named `ecommerce_db_test`. The test setup creates the database when needed, applies the Alembic head migration to it, and keeps test data separate from development data.
 
-The GitHub Actions workflow performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. It is currently configured for the backend pipeline. Frontend build and lint are verified locally but are not yet CI checks.
+The GitHub Actions workflow performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. Frontend build and lint are verified locally but are not yet CI checks.
 
 ## 8. Current Status
 
@@ -518,6 +540,7 @@ Step 38 — Observability                         COMPLETED
 Step 39 — Frontend Foundation + Product API    IMPLEMENTED AND PUSHED
 Step 40 — Frontend Authentication              IMPLEMENTED AND PUSHED
 Step 41 — Frontend Product Details              IMPLEMENTED AND PUSHED
+Step 42 — Frontend Cart                        IMPLEMENTED AND PUSHED
 
 Backend tests                                  56 passed
 Frontend build                                 GREEN
@@ -526,4 +549,4 @@ Test database                                  ISOLATED
 CI                                             GREEN (backend pipeline)
 ```
 
-The remote repository is synchronized with Step 41 and its current project documentation.
+The remote repository is synchronized with Step 42 and its current project documentation.
