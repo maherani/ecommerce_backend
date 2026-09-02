@@ -387,6 +387,59 @@ npm run build → green
 npm run lint  → green
 ```
 
+### Step 40 — Frontend Authentication
+
+```text
+Login Page
+    ↓
+POST /users/login
+    ↓
+JWT access_token
+    ↓
+localStorage
+    ↓
+authenticatedFetch()
+    ↓
+Authorization: Bearer <JWT>
+    ↓
+GET /users/me
+```
+
+Authentication is runtime-verified in the browser. The frontend displays the authenticated user's identity and admin status.
+
+### Step 41 — Frontend Product Details
+
+```text
+Products Page
+    ↓
+ProductCard
+    ↓
+View Product
+    ↓
+/products/:productId
+    ↓
+ProductDetailsPage
+    ↓
+getProduct(productId)
+    ↓
+GET /products/{product_id}
+    ↓
+Product details displayed
+```
+
+The backend provides `GET /products/{product_id}`. It loads the product by ID and returns HTTP 404 when the product does not exist.
+
+The frontend extracts `productId` from the route with React Router, requests the selected product through the API service, and handles loading, error, and not-found states.
+
+Runtime verification completed successfully using `/products/1` in the browser.
+
+Local validation:
+
+```text
+npm run build → green
+npm run lint  → green
+```
+
 ## 4. Checkout Transaction
 
 ```text
@@ -437,7 +490,7 @@ e3e6a6bd5e42_add_payment_webhook_event_id.py
 
 Step 35 adds a unique `event_id` to `payment_events` so provider webhook delivery can be handled idempotently.
 
-Steps 37–39 add no database migration.
+Steps 37–41 add no database migration.
 
 ## 7. Testing and CI
 
@@ -454,18 +507,23 @@ npm run build → green
 npm run lint  → green
 ```
 
-The GitHub Actions workflow performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. It is currently green for the backend pipeline. Frontend build and lint are verified locally but are not yet CI checks.
+Automated backend tests use a dedicated PostgreSQL database named `ecommerce_db_test`. The test setup creates the database when needed, applies the Alembic head migration to it, and keeps test data separate from development data.
+
+The GitHub Actions workflow performs Docker Compose startup, PostgreSQL readiness, `alembic upgrade head`, and Pytest. It is currently configured for the backend pipeline. Frontend build and lint are verified locally but are not yet CI checks.
 
 ## 8. Current Status
 
 ```text
 Step 38 — Observability                         COMPLETED
 Step 39 — Frontend Foundation + Product API    IMPLEMENTED AND PUSHED
+Step 40 — Frontend Authentication              IMPLEMENTED AND PUSHED
+Step 41 — Frontend Product Details              IMPLEMENTED AND PUSHED
 
 Backend tests                                  56 passed
 Frontend build                                 GREEN
 Frontend lint                                  GREEN
+Test database                                  ISOLATED
 CI                                             GREEN (backend pipeline)
 ```
 
-The remote repository is synchronized with the Step 39 frontend milestone and its current documentation.
+The remote repository is synchronized with Step 41 and its current project documentation.
