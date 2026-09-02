@@ -1,4 +1,5 @@
 import type { Product } from "../../types/product";
+import { Link } from "react-router-dom";
 
 interface ProductCardProps {
   product: Product;
@@ -30,9 +31,9 @@ function ProductCard({ product }: ProductCardProps) {
             : "Out of stock"}
         </p>
 
-        <button type="button">
+        <Link to={`/products/${product.id}`}>
           View Product
-        </button>
+        </Link>
       </div>
     </article>
   );

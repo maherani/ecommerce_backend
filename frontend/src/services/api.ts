@@ -70,3 +70,13 @@ export async function getCurrentUser() {
 
   return response.json();
 }
+
+export async function getProduct(productId: number) {
+  const response = await fetch(`${API_BASE_URL}/products/${productId}`);
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}

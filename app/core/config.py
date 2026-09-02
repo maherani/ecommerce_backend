@@ -1,3 +1,4 @@
+
 # app/core/config.py
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,9 +18,16 @@ class Settings(BaseSettings):
     # Payment webhook security.
     PAYMENT_WEBHOOK_SECRET: str
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    
+    TEST_DATABASE_URL: str | None = None
     # Build the SQLAlchemy connection URL from environment variables.
+
+
     @property
     def DATABASE_URL(self) -> str:
+        if self.TEST_DATABASE_URL:
+            return self.TEST_DATABASE_URL
+
         return (
             f"postgresql://"
             f"{self.POSTGRES_USER}:"
@@ -28,6 +36,7 @@ class Settings(BaseSettings):
             f"{self.POSTGRES_PORT}/"
             f"{self.POSTGRES_DB}"
         )
+    
 
     # Load configuration from the .env file.
     # Extra environment variables are ignored so unrelated settings
