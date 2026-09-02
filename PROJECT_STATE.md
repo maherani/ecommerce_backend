@@ -47,6 +47,7 @@ Steps 1–25 completed, followed by:
 - Step 39 — Frontend foundation and API integration
 - Step 40 — Frontend authentication
 - Step 41 — Frontend Product Details
+- Step 42 — Frontend Cart
 
 ## Implemented Features
 
@@ -116,28 +117,11 @@ Vite
 Oxlint
 ```
 
-The frontend has been verified locally with:
-
-```text
-npm run build  → green
-npm run lint   → green
-```
-
-The frontend successfully communicates with the running API and displays products returned by:
-
-```text
-GET /products/
-```
-
-The initial product UI includes reusable product-card/grid components and application pages/layouts/services/types. Product data has been verified in the browser.
-
-The Step 39 frontend implementation has been committed and pushed to the remote `main` branch.
+The frontend has reusable application layouts, pages, components, API services, and TypeScript types. The product list communicates with `GET /products/` and product data has been verified in the browser.
 
 ### Frontend Authentication — Step 40
 
-The frontend now supports JWT authentication through the FastAPI authentication API.
-
-Implemented flow:
+The frontend supports JWT authentication through:
 
 ```text
 Login Page
@@ -154,33 +138,21 @@ Authorization: Bearer <JWT>
     ↓
 GET /users/me
     ↓
-Authenticated User displayed in UI
-```
-
-Runtime verification completed successfully:
-
-```text
-Login successful
-access_token present in Local Storage
 Authenticated user displayed
 ```
 
+Runtime verification completed successfully in the browser.
+
 ### Frontend Product Details — Step 41
 
-The frontend now supports navigation from the product list to a dedicated product detail page.
-
-Implemented flow:
+The frontend supports navigation from the product list to a dedicated product detail page.
 
 ```text
 Products Page
     ↓
-ProductCard
-    ↓
 View Product
     ↓
 /products/:productId
-    ↓
-ProductDetailsPage
     ↓
 GET /products/{product_id}
     ↓
@@ -189,19 +161,37 @@ Product Details displayed
 
 The backend provides `GET /products/{product_id}` and returns `404` when the requested product does not exist.
 
-The Product Details page loads the product by route parameter, handles loading and error states, and displays title, description, price, and stock status.
+Runtime verification completed successfully using `/products/1`.
 
-Runtime verification completed successfully in the browser:
+### Frontend Cart — Step 42
+
+The frontend now provides an authenticated shopping cart flow.
 
 ```text
-/products
-    ↓
-View Product
-    ↓
-/products/1
-    ↓
-Product details displayed successfully
+Product Details
+      ↓
+Add to Cart
+      ↓
+POST /cart/
+      ↓
+Cart Page
+      ↓
+GET /cart/
+      ↓
+Cart Items
 ```
+
+Implemented capabilities:
+
+- Retrieve the current user's cart through `GET /cart/`
+- Add a product through `POST /cart/`
+- Increase the quantity of an existing cart item
+- Remove an item through `DELETE /cart/{item_id}`
+- Select quantity on the Product Details page
+- Prevent selecting a quantity above displayed stock in the UI
+- Calculate cart total as `price × quantity`
+
+Runtime verification completed successfully in the browser, including add, quantity, total calculation, and remove flows.
 
 ## Testing
 
@@ -225,7 +215,7 @@ npm run build
 npm run lint
 ```
 
-Both frontend commands were verified green locally.
+Both frontend commands were verified green locally after the Step 42 implementation.
 
 ### Test Database Isolation
 
@@ -233,14 +223,7 @@ Automated tests use a dedicated PostgreSQL database named `ecommerce_db_test` in
 
 The test setup creates the test database when needed, configures the test database URL before importing the application database session, and applies the Alembic head migration to the test database.
 
-Verified separation:
-
-```text
-ecommerce_db       → development data
- e-commerce_db_test → test data
-```
-
-The latest test run completed with 56 passing tests and the development database user data remained separate from test cleanup.
+The latest test run completed with 56 passing tests and development data remained separate from test cleanup.
 
 The GitHub Actions workflow currently verifies the Dockerized backend build, migrations, and Pytest suite; it does not yet run the frontend build/lint commands.
 
@@ -260,11 +243,11 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Steps 37–41 add no database migration.
+Steps 37–42 add no database migration.
 
 ## Repository Status
 
-The latest frontend Product Details implementation and test database isolation changes are committed and pushed to the remote `main` branch.
+The latest frontend Cart implementation and the test database isolation changes are committed and pushed to the remote `main` branch.
 
 Latest verified backend suite:
 
@@ -279,7 +262,7 @@ npm run build → green
 npm run lint  → green
 ```
 
-The current GitHub Actions workflow remains green for the backend Docker/pytest pipeline. Frontend build and lint are verified locally but are not yet separate CI checks.
+The GitHub Actions workflow remains a backend Docker/pytest pipeline. Frontend build and lint are verified locally but are not yet separate CI checks.
 
 ## Current Known Good State
 
@@ -290,6 +273,7 @@ Step 38 — Observability                   IMPLEMENTED
 Step 39 — Frontend foundation             IMPLEMENTED AND PUSHED
 Step 40 — Frontend authentication         IMPLEMENTED AND PUSHED
 Step 41 — Product Details                 IMPLEMENTED AND PUSHED
+Step 42 — Frontend Cart                   IMPLEMENTED AND PUSHED
 Grafana Dashboard                         IMPLEMENTED
 Grafana Panels                            5
 Backend Tests                             56 passed
@@ -322,7 +306,8 @@ Alembic head                              e3e6a6bd5e42
 
 ## Pending Work
 
-- Continue frontend cart, checkout, and order UI flows.
+- Continue frontend checkout and order UI flows.
+- Improve the cart UI with richer quantity controls and user feedback as needed.
 - Add frontend build and lint checks to GitHub Actions CI.
 - Keep documentation synchronized after each frontend milestone.
 
@@ -335,13 +320,13 @@ Alembic head                              e3e6a6bd5e42
 - Advanced inventory policies
 - Production alerting and SLO-based monitoring
 - Additional Grafana dashboards and alert rules
-- Product detail and catalog filtering/search
+- Product filtering/search
 - Customer session management and token lifecycle improvements
-- Cart and checkout UI
+- Checkout and order UI enhancements
 
 ## Next Recommended Step
 
-Implement the frontend cart flow, then continue with checkout and order UI. In parallel, add frontend build/lint validation to GitHub Actions.
+Implement the frontend checkout flow using the existing Cart and Order APIs, then continue with order UI. In parallel, add frontend build/lint validation to GitHub Actions.
 
 ## Notes For Future Sessions
 
