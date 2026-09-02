@@ -110,7 +110,21 @@ npm run lint  → green
 
 The Step 39 frontend foundation and product integration are committed and pushed to the remote `main` branch.
 
-The next frontend milestone is the Product Details route and UI, followed by authentication, cart, checkout, and order flows.
+### Step 40 — Frontend Authentication
+
+Frontend authentication now supports:
+
+- Login through `POST /users/login`
+- JWT access-token storage in `localStorage`
+- Authenticated requests through `authenticatedFetch`
+- Current-user retrieval through `GET /users/me`
+- Display of the authenticated user's email and admin status
+
+Runtime authentication was verified successfully in the browser:
+- Login successful
+- `access_token` present in Local Storage
+- Authenticated user displayed
+
 
 ## Testing
 
@@ -152,6 +166,7 @@ Step 36    — Webhook Delivery & Retry Infrastructure           ✅
 Step 37    — Security & API Hardening                          ✅
 Step 38    — Observability + Grafana Dashboard                 ✅
 Step 39    — Frontend Foundation + Product Integration          ✅
+Step 40    — Frontend Authentication                            ✅
 ```
 
 Step 39 is implemented, verified locally, committed, and pushed to the remote repository.
@@ -185,7 +200,7 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest documented milestone:
 
 ```text
-Step 39 — Frontend Foundation + Product Integration
+Step 40 — Frontend Authentication
 ```
 
 Latest verified backend test result:
@@ -201,7 +216,7 @@ build: green
 lint: green
 ```
 
-The payment provider remains simulated. The platform now has a working React frontend foundation connected to the FastAPI product API, and the Step 39 code is synchronized with the remote repository.
+The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI product API, and frontend authentication has been implemented and runtime-verified.
 
 ## Documentation
 

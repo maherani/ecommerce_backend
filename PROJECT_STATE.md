@@ -45,6 +45,7 @@ Steps 1–25 completed, followed by:
 - Step 37 — Security & API Hardening
 - Step 38 — Observability
 - Step 39 — Frontend foundation and API integration
+- Step 40 — Frontend authentication
 
 ## Implemented Features
 
@@ -130,6 +131,36 @@ GET /products/
 The initial product UI includes reusable product-card/grid components and application pages/layouts/services/types. Product data has been verified in the browser.
 
 The Step 39 frontend implementation has been committed and pushed to the remote `main` branch.
+
+### Frontend Authentication — Step 40
+
+The frontend now supports JWT authentication through the FastAPI authentication API.
+
+Implemented flow:
+
+```text
+Login Page
+    ↓
+POST /users/login
+    ↓
+JWT access_token
+    ↓
+localStorage
+    ↓
+authenticatedFetch()
+    ↓
+Authorization: Bearer <JWT>
+    ↓
+GET /users/me
+    ↓
+Authenticated User displayed in UI
+
+Runtime verification completed successfully:
+
+Login successful
+access_token present in Local Storage
+Authenticated user displayed
+
 
 ## Testing
 
@@ -228,7 +259,7 @@ Alembic head                              e3e6a6bd5e42
 
 ## Pending Work
 
-- Continue frontend product detail, authentication, cart, checkout, and order UI flows.
+- Continue frontend product detail, cart, checkout, and order UI flows.
 - Add frontend build and lint checks to GitHub Actions CI.
 - Keep documentation synchronized after each frontend milestone.
 
@@ -242,7 +273,7 @@ Alembic head                              e3e6a6bd5e42
 - Production alerting and SLO-based monitoring
 - Additional Grafana dashboards and alert rules
 - Product detail and catalog filtering/search
-- Customer authentication UI and session management
+- Customer session management and token lifecycle improvements
 - Cart and checkout UI
 
 ## Next Recommended Step
