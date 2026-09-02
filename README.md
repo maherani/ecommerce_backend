@@ -108,8 +108,6 @@ npm run build → green
 npm run lint  → green
 ```
 
-The Step 39 frontend foundation and product integration are committed and pushed to the remote `main` branch.
-
 ### Step 40 — Frontend Authentication
 
 Frontend authentication now supports:
@@ -120,17 +118,11 @@ Frontend authentication now supports:
 - Current-user retrieval through `GET /users/me`
 - Display of the authenticated user's email and admin status
 
-Runtime authentication was verified successfully in the browser:
-
-```text
-Login successful
-access_token present in Local Storage
-Authenticated user displayed
-```
+Runtime authentication was verified successfully in the browser.
 
 ### Step 41 — Frontend Product Details
 
-The frontend now supports navigation from the product list to a dedicated product detail page.
+The frontend supports navigation from the product list to a dedicated product detail page.
 
 ```text
 Products Page
@@ -144,17 +136,43 @@ GET /products/{product_id}
 Product Details Page
 ```
 
-The Product Details page loads a product using the route parameter, handles loading and error states, and displays the product title, description, price, and stock status.
+The Product Details page loads the product using the route parameter, handles loading and error states, and displays title, description, price, and stock status.
 
-The backend now provides:
+The backend endpoint returns `404` when the requested product does not exist.
+
+Product Details was verified successfully in the browser using `/products/1`.
+
+### Step 42 — Frontend Cart
+
+The frontend now provides an authenticated shopping cart flow.
 
 ```text
-GET /products/{product_id}
+Product Details
+      ↓
+Add to Cart
+      ↓
+POST /cart/
+      ↓
+Cart Page
+      ↓
+GET /cart/
+      ↓
+Cart Items
 ```
 
-The endpoint returns `404` when the requested product does not exist.
+Implemented capabilities:
 
-Product Details was verified successfully in the browser using the development product at `/products/1`.
+- Retrieve the current user's cart through `GET /cart/`
+- Add a product through `POST /cart/`
+- Increase the quantity of an existing cart item
+- Remove an item through `DELETE /cart/{item_id}`
+- Select a quantity on the Product Details page
+- Prevent selecting a quantity above displayed product stock in the UI
+- Calculate cart total as `price × quantity`
+
+The backend remains responsible for authoritative product existence and stock validation. The frontend quantity limit is a user-experience safeguard, not a security boundary.
+
+The Cart flow was runtime-verified in the browser, including adding a product, displaying quantity and total, and removing the item.
 
 Frontend validation:
 
@@ -207,9 +225,8 @@ Step 38    — Observability + Grafana Dashboard                 ✅
 Step 39    — Frontend Foundation + Product Integration          ✅
 Step 40    — Frontend Authentication                            ✅
 Step 41    — Frontend Product Details                           ✅
+Step 42    — Frontend Cart                                     ✅
 ```
-
-Step 41 is implemented, locally verified, committed, and pushed to the remote repository.
 
 ## Database Migration Chain
 
@@ -227,7 +244,7 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Steps 37–41 add no database migration.
+Steps 37–42 add no database migration.
 
 ## Development Workflow
 
@@ -240,7 +257,7 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 Latest documented milestone:
 
 ```text
-Step 41 — Frontend Product Details
+Step 42 — Frontend Cart
 ```
 
 Latest verified backend test result:
@@ -256,7 +273,7 @@ build: green
 lint: green
 ```
 
-The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI product API, frontend authentication, and a verified product detail flow.
+The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI product API, frontend authentication, product detail navigation, and an authenticated cart flow with quantity and total handling.
 
 ## Documentation
 
