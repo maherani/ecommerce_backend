@@ -70,6 +70,7 @@ is_superuser
 | Method | Endpoint | Authentication | Purpose |
 |---|---|---|---|
 | GET | `/products/` | Public | List products |
+| GET | `/products/{product_id}` | Public | Get one product by ID |
 | POST | `/products/` | Admin JWT | Create a product |
 
 ### ProductCreate
@@ -98,6 +99,34 @@ stock_quantity
 is_active
 category_id
 category
+```
+
+### Get Product By ID
+
+```text
+GET /products/{product_id}
+```
+
+Returns the product matching `product_id`.
+
+Response when the product exists:
+
+```json
+{
+  "id": 1,
+  "title": "Laptop",
+  "description": "Development laptop",
+  "price": 1200,
+  "stock_quantity": 10,
+  "is_active": true,
+  "category_id": 1
+}
+```
+
+Response when the product does not exist:
+
+```text
+404 Not Found
 ```
 
 ## Cart API
@@ -209,6 +238,7 @@ GET    /users/admin-only
 GET    /categories/
 POST   /categories/
 GET    /products/
+GET    /products/{product_id}
 POST   /products/
 GET    /cart/
 POST   /cart/
