@@ -46,6 +46,7 @@ Steps 1–25 completed, followed by:
 - Step 38 — Observability
 - Step 39 — Frontend foundation and API integration
 - Step 40 — Frontend authentication
+- Step 41 — Frontend Product Details
 
 ## Implemented Features
 
@@ -154,13 +155,53 @@ Authorization: Bearer <JWT>
 GET /users/me
     ↓
 Authenticated User displayed in UI
+```
 
 Runtime verification completed successfully:
 
+```text
 Login successful
 access_token present in Local Storage
 Authenticated user displayed
+```
 
+### Frontend Product Details — Step 41
+
+The frontend now supports navigation from the product list to a dedicated product detail page.
+
+Implemented flow:
+
+```text
+Products Page
+    ↓
+ProductCard
+    ↓
+View Product
+    ↓
+/products/:productId
+    ↓
+ProductDetailsPage
+    ↓
+GET /products/{product_id}
+    ↓
+Product Details displayed
+```
+
+The backend provides `GET /products/{product_id}` and returns `404` when the requested product does not exist.
+
+The Product Details page loads the product by route parameter, handles loading and error states, and displays title, description, price, and stock status.
+
+Runtime verification completed successfully in the browser:
+
+```text
+/products
+    ↓
+View Product
+    ↓
+/products/1
+    ↓
+Product details displayed successfully
+```
 
 ## Testing
 
@@ -184,7 +225,24 @@ npm run build
 npm run lint
 ```
 
-Both frontend commands were verified green locally. The GitHub Actions workflow currently verifies the Dockerized backend build, migrations, and Pytest suite; it does not yet run the frontend build/lint commands.
+Both frontend commands were verified green locally.
+
+### Test Database Isolation
+
+Automated tests use a dedicated PostgreSQL database named `ecommerce_db_test` instead of the development database.
+
+The test setup creates the test database when needed, configures the test database URL before importing the application database session, and applies the Alembic head migration to the test database.
+
+Verified separation:
+
+```text
+ecommerce_db       → development data
+ e-commerce_db_test → test data
+```
+
+The latest test run completed with 56 passing tests and the development database user data remained separate from test cleanup.
+
+The GitHub Actions workflow currently verifies the Dockerized backend build, migrations, and Pytest suite; it does not yet run the frontend build/lint commands.
 
 ## Database Migration Chain
 
@@ -202,11 +260,11 @@ e124ed32b079_add_payment_events_table.py
 e3e6a6bd5e42_add_payment_webhook_event_id.py
 ```
 
-Steps 37–39 add no database migration.
+Steps 37–41 add no database migration.
 
 ## Repository Status
 
-The Step 39 frontend implementation and synchronized documentation are committed and pushed to the remote `main` branch. The repository contains the React/TypeScript frontend foundation, current API documentation, architecture documentation, and project-state documentation for the milestone.
+The latest frontend Product Details implementation and test database isolation changes are committed and pushed to the remote `main` branch.
 
 Latest verified backend suite:
 
@@ -230,11 +288,14 @@ Step 36 — Webhook Delivery & Retry        COMPLETED
 Step 37 — Security & API Hardening        COMPLETED
 Step 38 — Observability                   IMPLEMENTED
 Step 39 — Frontend foundation             IMPLEMENTED AND PUSHED
+Step 40 — Frontend authentication         IMPLEMENTED AND PUSHED
+Step 41 — Product Details                 IMPLEMENTED AND PUSHED
 Grafana Dashboard                         IMPLEMENTED
 Grafana Panels                            5
 Backend Tests                             56 passed
 Frontend Build                            GREEN
 Frontend Lint                             GREEN
+Test Database                             ISOLATED
 Alembic head                              e3e6a6bd5e42
 ```
 
@@ -255,11 +316,13 @@ Alembic head                              e3e6a6bd5e42
 - A Vite React frontend must use the actual development origin (`localhost:5173`) in backend CORS configuration.
 - Frontend dependency/runtime versions must be compatible with the installed Node.js version.
 - Backend API behavior should be verified from generated OpenAPI data before implementing frontend API integrations.
+- Automated tests must run against a dedicated test database and must not share the development database.
+- The test suite now creates and migrates a separate `ecommerce_db_test` database.
 - Payment and refund remain mock provider operations.
 
 ## Pending Work
 
-- Continue frontend product detail, cart, checkout, and order UI flows.
+- Continue frontend cart, checkout, and order UI flows.
 - Add frontend build and lint checks to GitHub Actions CI.
 - Keep documentation synchronized after each frontend milestone.
 
@@ -278,7 +341,7 @@ Alembic head                              e3e6a6bd5e42
 
 ## Next Recommended Step
 
-Implement the Product Details route and UI using the existing `GET /products/` API surface, then extend the frontend authentication, cart, checkout, and order flows. In parallel, add frontend build/lint validation to GitHub Actions.
+Implement the frontend cart flow, then continue with checkout and order UI. In parallel, add frontend build/lint validation to GitHub Actions.
 
 ## Notes For Future Sessions
 
