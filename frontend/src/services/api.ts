@@ -1,23 +1,23 @@
 const API_BASE_URL = "http://localhost:8000";
 
-export async function getProducts() {
-  const response = await fetch(`${API_BASE_URL}/products/`);
+async function authenticatedFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+) {
+  const token = localStorage.getItem("access_token");
 
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+  if (!token) {
+    throw new Error("Not authenticated");
   }
 
-  return response.json();
-}
+  const headers = new Headers(init.headers);
 
-export async function getCategories() {
-  const response = await fetch(`${API_BASE_URL}/categories/`);
+  headers.set("Authorization", `Bearer ${token}`);
 
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
-  }
-
-  return response.json();
+  return fetch(input, {
+    ...init,
+    headers,
+  });
 }
 
 export async function login(email: string, password: string) {
@@ -41,18 +41,28 @@ export async function login(email: string, password: string) {
   return response.json();
 }
 
-export async function getCurrentUser() {
-  const token = localStorage.getItem("access_token");
+export async function getProducts() {
+  const response = await fetch(`${API_BASE_URL}/products/`);
 
-  if (!token) {
-    throw new Error("Not authenticated");
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}/users/me`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  return response.json();
+}
+
+export async function getCategories() {
+  const response = await fetch(`${API_BASE_URL}/categories/`);
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getCurrentUser() {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users/me`);
 
   if (!response.ok) {
     throw new Error(`Authentication failed: ${response.status}`);
