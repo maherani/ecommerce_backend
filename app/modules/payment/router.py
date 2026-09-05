@@ -93,6 +93,7 @@ async def payment_webhook(
         message="Payment webhook queued for processing",
         transaction_id=payment.transaction_id
     )
+
 @router.post("/process", response_model=schemas.PaymentResponse)
 def process_payment(
    payment_data: schemas.PaymentRequest,
@@ -178,6 +179,44 @@ def process_payment(
         message="Payment processed successfully",
         transaction_id=payment.transaction_id
     )
+
+@router.get(
+    "/orders/{order_id}",
+    response_model=schemas.PaymentDetailsResponse,
+)
+def get_order_payment(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """مشاهده اطلاعات پرداخت یک سفارش متعلق به کاربر جاری"""
+
+    order = db.query(Order).filter(
+        Order.id == order_id,
+        Order.user_id == current_user.id,
+    ).first()
+
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Order not found",
+        )
+
+    payment = db.query(models.Payment).filter(
+        models.Payment.order_id == order.id
+    ).first()
+
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found",
+        )
+
+    return payment
+
+
+
+
 @router.post("/{order_id}/refund", response_model=schemas.PaymentResponse)
 def refund_payment(
     order_id: int,
@@ -221,6 +260,7 @@ def refund_payment(
 
     payment.status = "refunded"
     payment.refunded_at = datetime.now(timezone.utc)
+    order.status = "cancelled"
 
 
     refund_event = models.PaymentEvent(

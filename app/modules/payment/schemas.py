@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 class PaymentRequest(BaseModel):
@@ -14,3 +16,13 @@ class PaymentWebhookRequest(BaseModel):
     transaction_id: str
     status: str
     event_id: str
+
+class PaymentDetailsResponse(BaseModel):
+    id: int
+    order_id: int
+    amount: float
+    status: str
+    transaction_id: str | None
+    created_at: datetime
+    paid_at: datetime | None
+    refunded_at: datetime | None

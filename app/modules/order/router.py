@@ -107,6 +107,16 @@ def get_my_orders(
     """مشاهده تمام سفارش‌های ثبت‌شده توسط کاربر جاری"""
     return db.query(models.Order).filter(models.Order.user_id == current_user.id).all()
 
+@router.get(
+    "/admin",
+    response_model=List[schemas.OrderResponse],
+)
+def get_all_orders_for_admin(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_current_admin_user),
+):
+    """مشاهده تمام سفارش‌ها توسط مدیر"""
+    return db.query(models.Order).all()
 
 @router.patch("/{order_id}/status", response_model=schemas.OrderResponse)
 def update_order_status(

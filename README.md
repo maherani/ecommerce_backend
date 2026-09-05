@@ -180,6 +180,28 @@ Frontend validation:
 npm run build → green
 npm run lint  → green
 ```
+### Steps 43–48 — Frontend Orders & Payment
+
+The frontend now supports authenticated order management and payment flows.
+
+Implemented capabilities:
+
+- List the current user's orders through `GET /orders/`
+- Cancel pending orders
+- Process payments through `POST /payment/process`
+- Use an idempotency key for frontend payment requests
+- Retrieve payment details through `GET /payment/orders/{order_id}`
+- Display payment status, amount, transaction ID, creation time, paid time, and refunded time
+- Refund paid orders
+- Keep Order and Payment states consistent after refund
+
+The refund flow now results in:
+
+```text
+Payment status → refunded
+Order status   → cancelled
+```
+Runtime verification completed successfully in the browser.
 
 ## Testing
 
@@ -207,7 +229,7 @@ npm run lint
 
 Both commands were verified green locally.
 
-The current GitHub Actions workflow verifies Docker Compose startup, database migrations, and the backend Pytest suite. It does not yet run the frontend build/lint commands.
+GitHub Actions now verifies Docker Compose startup, database migrations, the backend Pytest suite, frontend dependency installation, frontend lint, and frontend production build.
 
 ## Current Development Progress
 
@@ -226,6 +248,9 @@ Step 39    — Frontend Foundation + Product Integration          ✅
 Step 40    — Frontend Authentication                            ✅
 Step 41    — Frontend Product Details                           ✅
 Step 42    — Frontend Cart                                     ✅
+Step 48    — Frontend Orders + Payment                         ✅
+Step 49    — Frontend CI Validation                            ✅
+
 ```
 
 ## Database Migration Chain
@@ -256,11 +281,9 @@ Inspect → Implement → Test → Update documentation → Review Git diff → 
 
 Latest documented milestone:
 
-```text
-Step 42 — Frontend Cart
-```
+Step 49 — Frontend CI Validation
 
-Latest verified backend test result:
+Orders + Payment + CI
 
 ```text
 56 passed
@@ -273,7 +296,7 @@ build: green
 lint: green
 ```
 
-The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI product API, frontend authentication, product detail navigation, and an authenticated cart flow with quantity and total handling.
+The payment provider remains simulated. The platform now has a working React frontend connected to the FastAPI backend, including product browsing, authentication, cart, checkout, order management, payment processing, payment details, refunds, and frontend CI validation.
 
 ## Documentation
 

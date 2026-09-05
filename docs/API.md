@@ -172,6 +172,7 @@ Checkout performs stock reservation and creates the order, order items, and ship
 | Method | Endpoint | Authentication | Purpose |
 |---|---|---|---|
 | POST | `/payment/process` | Bearer JWT | Process a payment |
+| GET | `/payment/orders/{order_id}` | Bearer JWT | Get payment details for an order |
 | POST | `/payment/{order_id}/refund` | Bearer JWT | Refund a paid order |
 | POST | `/payment/webhook` | HMAC signature | Process provider webhook |
 
@@ -196,6 +197,32 @@ Checkout performs stock reservation and creates the order, order items, and ship
   "event_id": "provider-event-id"
 }
 ```
+### PaymentDetailsResponse
+
+```text
+id
+order_id
+amount
+status
+transaction_id
+created_at
+paid_at
+refunded_at
+```
+
+### Get Order Payment
+
+GET /payment/orders/{order_id}
+
+Returns payment details for an order belonging to the authenticated user.
+
+If the order does not exist or does not belong to the current user:
+
+404 Not Found
+
+If the order has no payment:
+
+404 Not Found
 
 Webhook authentication uses the configured `PAYMENT_WEBHOOK_SECRET` and HMAC-SHA256 signature validation.
 
@@ -230,7 +257,7 @@ http_request_duration_seconds
 
 ## Current Verified API Surface
 
-```text
+```text  id="5lmm0r"
 POST   /users/
 POST   /users/login
 GET    /users/me
@@ -249,10 +276,20 @@ PATCH  /orders/{order_id}/status
 POST   /orders/{order_id}/cancel
 POST   /payment/webhook
 POST   /payment/process
+GET    /payment/orders/{order_id}
 POST   /payment/{order_id}/refund
 PATCH  /shipping/{order_id}
 GET    /metrics
 GET    /
+```
+## Frontend CI Validation
+
+GitHub Actions validates the frontend with:
+
+```text
+npm ci
+npm run lint
+npm run build
 ```
 
 The endpoint list and schemas above were verified against the running application's generated OpenAPI specification during the current development milestone.

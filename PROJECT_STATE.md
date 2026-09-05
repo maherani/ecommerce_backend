@@ -48,6 +48,8 @@ Steps 1–25 completed, followed by:
 - Step 40 — Frontend authentication
 - Step 41 — Frontend Product Details
 - Step 42 — Frontend Cart
+- Step 48 — Frontend Payment Details and Refund State Consistency
+- Step 49 — Frontend CI Validation
 
 ## Implemented Features
 
@@ -193,6 +195,29 @@ Implemented capabilities:
 
 Runtime verification completed successfully in the browser, including add, quantity, total calculation, and remove flows.
 
+### Frontend Orders & Payment — Steps 43–48
+
+The frontend now provides authenticated order management and payment flows.
+
+Implemented capabilities:
+
+- List the current user's orders through `GET /orders/`
+- Cancel pending orders
+- Process payments through `POST /payment/process`
+- Use an idempotency key for frontend payment requests
+- Retrieve payment details through `GET /payment/orders/{order_id}`
+- Display payment status, amount, transaction ID, creation time, paid time, and refunded time
+- Refund paid orders
+- Keep Order and Payment states consistent after refund
+
+The refund flow now results in:
+
+```text
+Payment status → refunded
+Order status   → cancelled
+```
+Runtime verification completed successfully in the browser.
+
 ## Testing
 
 Latest full-suite verification:
@@ -225,8 +250,7 @@ The test setup creates the test database when needed, configures the test databa
 
 The latest test run completed with 56 passing tests and development data remained separate from test cleanup.
 
-The GitHub Actions workflow currently verifies the Dockerized backend build, migrations, and Pytest suite; it does not yet run the frontend build/lint commands.
-
+The GitHub Actions workflow verifies the Dockerized backend build, database migrations, Pytest suite, frontend dependency installation, frontend lint, and frontend production build.
 ## Database Migration Chain
 
 ```text
@@ -262,7 +286,15 @@ npm run build → green
 npm run lint  → green
 ```
 
-The GitHub Actions workflow remains a backend Docker/pytest pipeline. Frontend build and lint are verified locally but are not yet separate CI checks.
+The GitHub Actions workflow now verifies both backend and frontend checks.
+
+Frontend CI checks:
+
+```text
+npm ci
+npm run lint
+npm run build
+```
 
 ## Current Known Good State
 
@@ -274,6 +306,8 @@ Step 39 — Frontend foundation             IMPLEMENTED AND PUSHED
 Step 40 — Frontend authentication         IMPLEMENTED AND PUSHED
 Step 41 — Product Details                 IMPLEMENTED AND PUSHED
 Step 42 — Frontend Cart                   IMPLEMENTED AND PUSHED
+Step 48 — Payment details/refund consistency IMPLEMENTED
+Step 49 — Frontend CI validation          IMPLEMENTED
 Grafana Dashboard                         IMPLEMENTED
 Grafana Panels                            5
 Backend Tests                             56 passed
@@ -308,7 +342,6 @@ Alembic head                              e3e6a6bd5e42
 
 - Continue frontend checkout and order UI flows.
 - Improve the cart UI with richer quantity controls and user feedback as needed.
-- Add frontend build and lint checks to GitHub Actions CI.
 - Keep documentation synchronized after each frontend milestone.
 
 ## Future Enhancements
@@ -326,7 +359,7 @@ Alembic head                              e3e6a6bd5e42
 
 ## Next Recommended Step
 
-Implement the frontend checkout flow using the existing Cart and Order APIs, then continue with order UI. In parallel, add frontend build/lint validation to GitHub Actions.
+Continue frontend order/payment enhancements and improve frontend integration and CI coverage as the project grows.
 
 ## Notes For Future Sessions
 

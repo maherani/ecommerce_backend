@@ -122,3 +122,127 @@ export async function removeFromCart(itemId: number) {
     throw new Error(`API request failed: ${response.status}`);
   }
 }
+export async function checkout(
+  address: string,
+  city: string,
+  postalCode: string,
+) {
+  const response = await authenticatedFetch(`${API_BASE_URL}/orders/checkout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      address,
+      city,
+      postal_code: postalCode,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Checkout failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+export async function getOrders() {
+  const response = await authenticatedFetch(`${API_BASE_URL}/orders/`);
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getAdminOrders() {
+  const response = await authenticatedFetch(`${API_BASE_URL}/orders/admin`);
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function cancelOrder(orderId: number) {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/orders/${orderId}/cancel`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Cancel order failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function updateOrderStatus(
+  orderId: number,
+  newStatus: string,
+) {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/orders/${orderId}/status?new_status=${encodeURIComponent(newStatus)}`,
+    {
+      method: "PATCH",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Update order status failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function processPayment(
+  orderId: number,
+  idempotencyKey?: string,
+) {
+  const response = await authenticatedFetch(`${API_BASE_URL}/payment/process`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      order_id: orderId,
+      ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Payment failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function refundPayment(orderId: number) {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/payment/${orderId}/refund`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Refund failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getOrderPayment(orderId: number) {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/payment/orders/${orderId}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Get payment failed: ${response.status}`);
+  }
+
+  return response.json();
+}

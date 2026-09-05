@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { getCart, removeFromCart } from "../services/api";
 import type { CartItem } from "../types/cart";
@@ -43,40 +44,47 @@ function CartPage() {
       {cartItems.length === 0 ? (
         <p>Your cart is empty.</p>
       ) : (
-        <div>
-          {cartItems.map((item) => (
-            <article key={item.id}>
-              <h3>{item.product?.title ?? "Product"}</h3>
+        <>
+          <div>
+            {cartItems.map((item) => (
+              <article key={item.id}>
+                <h3>{item.product?.title ?? "Product"}</h3>
 
-              <p>Quantity: {item.quantity}</p>
+                <p>Quantity: {item.quantity}</p>
 
-              {item.product && (
-                <p>${item.product.price.toFixed(2)}</p>
-              )}
-              <p>
-                Total: ${total.toFixed(2)}
-              </p>
+                {item.product && (
+                  <p>${item.product.price.toFixed(2)}</p>
+                )}
 
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await removeFromCart(item.id);
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await removeFromCart(item.id);
 
-                    setCartItems((currentItems) =>
-                      currentItems.filter((currentItem) => currentItem.id !== item.id),
-                    );
-                  } catch (err) {
-                    console.error(err);
-                    setError("Failed to remove item from cart.");
-                  }
-                }}
-              >
-                Remove
-              </button>
-            </article>
-          ))}
-        </div>
+                      setCartItems((currentItems) =>
+                        currentItems.filter(
+                          (currentItem) => currentItem.id !== item.id,
+                        ),
+                      );
+                    } catch (err) {
+                      console.error(err);
+                      setError("Failed to remove item from cart.");
+                    }
+                  }}
+                >
+                  Remove
+                </button>
+              </article>
+            ))}
+          </div>
+
+          <p>Total: ${total.toFixed(2)}</p>
+
+          <div>
+            <Link to="/checkout">Proceed to Checkout</Link>
+          </div>
+        </>
       )}
     </section>
   );
