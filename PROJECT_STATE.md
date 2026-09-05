@@ -48,8 +48,9 @@ Steps 1–25 completed, followed by:
 - Step 40 — Frontend authentication
 - Step 41 — Frontend Product Details
 - Step 42 — Frontend Cart
-- Step 48 — Frontend Payment Details and Refund State Consistency
+- Steps 43–48 — Frontend Orders & Payment
 - Step 49 — Frontend CI Validation
+- Step 50.2 — Admin Shipping Editing
 
 ## Implemented Features
 
@@ -218,6 +219,58 @@ Order status   → cancelled
 ```
 Runtime verification completed successfully in the browser.
 
+### Frontend CI — Step 49
+
+The frontend is validated by the CI workflow through dependency installation, linting, and a production build.
+
+```text
+npm ci
+npm run lint
+npm run build
+```
+
+### Admin Orders & Shipping — Step 50.2
+
+The Admin Orders page now allows an authenticated administrator to edit shipping carrier and tracking number for an existing order.
+
+Frontend flow:
+
+```text
+Admin Orders Page
+        ↓
+/admin/orders
+        ↓
+GET /orders/admin
+        ↓
+Edit Carrier / Tracking Number
+        ↓
+PATCH /shipping/{order_id}
+        ↓
+Updated ShippingResponse
+```
+
+Implemented capabilities:
+
+- Display shipping information for admin orders
+- Edit the shipping carrier
+- Edit the tracking number
+- Submit shipping changes through `PATCH /shipping/{order_id}`
+- Send only non-empty carrier/tracking fields in the request payload
+- Disable the update button while the request is in progress
+- Update the corresponding order's shipping state from the API response
+- Display an error when the shipping update fails
+
+The backend contract uses `ShippingUpdate` with optional `carrier` and `tracking_number` fields and returns `ShippingResponse`.
+
+Runtime verification completed successfully in the browser. A test update using carrier `TestCarrier` and tracking number `TEST123456` was persisted by the backend and remained visible after refresh.
+
+Frontend verification for Step 50.2:
+
+```text
+npm run lint  → green
+npm run build → green
+```
+
 ## Testing
 
 Latest full-suite verification:
@@ -240,7 +293,7 @@ npm run build
 npm run lint
 ```
 
-Both frontend commands were verified green locally after the Step 42 implementation.
+Both frontend commands were verified green locally after the Step 50.2 implementation.
 
 ### Test Database Isolation
 
@@ -251,6 +304,7 @@ The test setup creates the test database when needed, configures the test databa
 The latest test run completed with 56 passing tests and development data remained separate from test cleanup.
 
 The GitHub Actions workflow verifies the Dockerized backend build, database migrations, Pytest suite, frontend dependency installation, frontend lint, and frontend production build.
+
 ## Database Migration Chain
 
 ```text
@@ -271,7 +325,7 @@ Steps 37–42 add no database migration.
 
 ## Repository Status
 
-The latest frontend Cart implementation and the test database isolation changes are committed and pushed to the remote `main` branch.
+The latest frontend Admin Shipping implementation is committed locally and the documentation has been synchronized with Step 50.2.
 
 Latest verified backend suite:
 
@@ -286,7 +340,7 @@ npm run build → green
 npm run lint  → green
 ```
 
-The GitHub Actions workflow now verifies both backend and frontend checks.
+The GitHub Actions workflow verifies both backend and frontend checks.
 
 Frontend CI checks:
 
@@ -308,6 +362,7 @@ Step 41 — Product Details                 IMPLEMENTED AND PUSHED
 Step 42 — Frontend Cart                   IMPLEMENTED AND PUSHED
 Step 48 — Payment details/refund consistency IMPLEMENTED
 Step 49 — Frontend CI validation          IMPLEMENTED
+Step 50.2 — Admin Shipping Editing        IMPLEMENTED AND TESTED
 Grafana Dashboard                         IMPLEMENTED
 Grafana Panels                            5
 Backend Tests                             56 passed
@@ -337,11 +392,13 @@ Alembic head                              e3e6a6bd5e42
 - Automated tests must run against a dedicated test database and must not share the development database.
 - The test suite now creates and migrates a separate `ecommerce_db_test` database.
 - Payment and refund remain mock provider operations.
+- Admin frontend mutations should reuse the backend's existing authenticated API contracts and update local state from the authoritative API response.
 
 ## Pending Work
 
 - Continue frontend checkout and order UI flows.
 - Improve the cart UI with richer quantity controls and user feedback as needed.
+- Improve admin shipping update UX so the saved values are reflected immediately without requiring a page refresh if further polish is desired.
 - Keep documentation synchronized after each frontend milestone.
 
 ## Future Enhancements
@@ -356,10 +413,11 @@ Alembic head                              e3e6a6bd5e42
 - Product filtering/search
 - Customer session management and token lifecycle improvements
 - Checkout and order UI enhancements
+- Richer admin order-management UX
 
 ## Next Recommended Step
 
-Continue frontend order/payment enhancements and improve frontend integration and CI coverage as the project grows.
+Continue the frontend admin/order workflow after Step 50.2, then verify and document the next milestone.
 
 ## Notes For Future Sessions
 
@@ -368,6 +426,7 @@ Start with:
 ```bash
 git status --short
 git log -1 --oneline
+git log origin/main..HEAD --oneline
 docker compose ps
 docker compose exec web pytest -q
 cd frontend && npm run build && npm run lint
