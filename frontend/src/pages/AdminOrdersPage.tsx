@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
 import {
-getAdminOrders,
-updateOrderStatus,
+  getAdminOrders,
+  updateOrderStatus,
+  updateShipping,
 } from "../services/api";
+
 import type { Order } from "../types/order";
 
 const nextStatus: Record<string, string | null> = {
@@ -22,12 +24,35 @@ const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(
 null,
 );
 const [error, setError] = useState<string | null>(null);
+const [updatingShippingOrderId, setUpdatingShippingOrderId] =
+  useState<number | null>(null);
+
+const [carrierValues, setCarrierValues] = useState<Record<number, string>>(
+  {},
+);
+
+const [trackingValues, setTrackingValues] = useState<Record<number, string>>(
+  {},
+);
 
 useEffect(() => {
 async function loadOrders() {
 try {
+
 const data = await getAdminOrders();
+
 setOrders(data);
+
+const carriers: Record<number, string> = {};
+const trackingNumbers: Record<number, string> = {};
+
+for (const order of data) {
+  carriers[order.id] = order.shipping?.carrier ?? "";
+  trackingNumbers[order.id] = order.shipping?.tracking_number ?? "";
+}
+
+setCarrierValues(carriers);
+setTrackingValues(trackingNumbers);
 } catch (err) {
 console.error(err);
 setError("Failed to load admin orders.");
@@ -60,6 +85,35 @@ try {
   setUpdatingOrderId(null);
 }
 
+}
+
+async function handleShippingUpdate(orderId: number) {
+  setUpdatingShippingOrderId(orderId);
+  setError(null);
+
+  try {
+    const updatedShipping = await updateShipping(
+      orderId,
+      carrierValues[orderId],
+      trackingValues[orderId],
+    );
+
+    setOrders((currentOrders) =>
+      currentOrders.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              shipping: updatedShipping,
+            }
+          : order,
+      ),
+    );
+  } catch (err) {
+    console.error(err);
+    setError("Failed to update shipping information.");
+  } finally {
+    setUpdatingShippingOrderId(null);
+  }
 }
 
 if (loading) {
@@ -109,12 +163,50 @@ return ( <section> <h2>Admin Orders</h2>
             {order.shipping && (
               <div>
                 <h4>Shipping</h4>
+
                 <p>{order.shipping.address}</p>
                 <p>{order.shipping.city}</p>
                 <p>{order.shipping.postal_code}</p>
+
+                <label>
+                  Carrier:
+                  <input
+                    type="text"
+                    value={carrierValues[order.id] ?? ""}
+                    onChange={(event) =>
+                      setCarrierValues((currentValues) => ({
+                        ...currentValues,
+                        [order.id]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <label>
+                  Tracking Number:
+                  <input
+                    type="text"
+                    value={trackingValues[order.id] ?? ""}
+                    onChange={(event) =>
+                      setTrackingValues((currentValues) => ({
+                        ...currentValues,
+                        [order.id]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => handleShippingUpdate(order.id)}
+                  disabled={updatingShippingOrderId === order.id}
+                >
+                  {updatingShippingOrderId === order.id
+                    ? "Updating Shipping..."
+                    : "Update Shipping"}
+                </button>
               </div>
             )}
-
             <p>
               <strong>
                 Total: ${order.total_price.toFixed(2)}

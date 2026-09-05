@@ -246,3 +246,29 @@ export async function getOrderPayment(orderId: number) {
 
   return response.json();
 }
+
+export async function updateShipping(
+  orderId: number,
+  carrier?: string,
+  trackingNumber?: string,
+) {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/shipping/${orderId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...(carrier ? { carrier } : {}),
+        ...(trackingNumber ? { tracking_number: trackingNumber } : {}),
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Update shipping failed: ${response.status}`);
+  }
+
+  return response.json();
+}
